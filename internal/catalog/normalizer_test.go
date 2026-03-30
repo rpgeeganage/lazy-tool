@@ -25,6 +25,48 @@ func TestNormalizeTool_tagsAndSearchText(t *testing.T) {
 	}
 }
 
+func TestSanitizeSegment_preservesHyphenUnderscoreDistinction(t *testing.T) {
+	// These must produce different segments so canonical names don't collide.
+	cases := []struct {
+		a, b string
+	}{
+		{"my-gw", "my_gw"},
+		{"foo-bar", "foo_bar"},
+		{"a-b-c", "a_b_c"},
+	}
+	for _, tc := range cases {
+		sa := SanitizeSegment(tc.a)
+		sb := SanitizeSegment(tc.b)
+		if sa == sb {
+			t.Errorf("SanitizeSegment(%q) == SanitizeSegment(%q) == %q; want different segments", tc.a, tc.b, sa)
+		}
+	}
+}
+
+func TestSanitizeSegment_noDoubleUnderscore(t *testing.T) {
+	// No segment should ever contain "__" because that's the canonical name delimiter.
+	inputs := []string{"foo__bar", "a___b", "x____y", "hello  world", "a..b"}
+	for _, in := range inputs {
+		out := SanitizeSegment(in)
+		if strings.Contains(out, "__") {
+			t.Errorf("SanitizeSegment(%q) = %q; must not contain double underscore", in, out)
+		}
+	}
+}
+
+func TestNormalizeTool_noCanonicalCollision(t *testing.T) {
+	now := time.Now()
+	srcA := models.Source{ID: "my-gw", Type: models.SourceTypeGateway, Transport: models.TransportHTTP}
+	srcB := models.Source{ID: "my_gw", Type: models.SourceTypeGateway, Transport: models.TransportHTTP}
+	meta := connectors.ToolMeta{Name: "echo", Description: "echo tool"}
+
+	recA := NormalizeTool(srcA, meta, now)
+	recB := NormalizeTool(srcB, meta, now)
+	if recA.CanonicalName == recB.CanonicalName {
+		t.Fatalf("canonical collision: source %q and %q both produce %q", srcA.ID, srcB.ID, recA.CanonicalName)
+	}
+}
+
 func TestNormalizePrompt_kindAndCanonical(t *testing.T) {
 	src := models.Source{ID: "gw", Type: models.SourceTypeGateway, Transport: models.TransportHTTP}
 	meta := connectors.PromptMeta{

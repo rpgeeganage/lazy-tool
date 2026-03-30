@@ -31,3 +31,12 @@ var UpstreamMCPIdleSessionRecycled = func(sourceID string) {}
 
 // SearchEmptyQueryScan reports empty-query ('' needle) catalog scan shape: total IDs in DB, IDs processed after optional cap, truncated.
 var SearchEmptyQueryScan = func(totalIDs, processedIDs int, truncated bool) {}
+
+// CircuitBreakerTripped is called when a source's circuit breaker transitions to open.
+var CircuitBreakerTripped = func(sourceID string) {}
+
+// CircuitBreakerReset is called when a source's circuit breaker transitions from half-open back to closed.
+var CircuitBreakerReset = func(sourceID string) {}
+
+// PassthroughFallbackActivated is called when passthrough fallback returns results (zero search results triggered it).
+var PassthroughFallbackActivated = func(resultCount int) {}

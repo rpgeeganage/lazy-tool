@@ -7,12 +7,14 @@ import (
 	"time"
 
 	"lazy-tool/internal/app"
+	"lazy-tool/internal/cache"
 	"lazy-tool/internal/config"
 	"lazy-tool/internal/connectors"
 	"lazy-tool/internal/embeddings"
 	"lazy-tool/internal/search"
 	"lazy-tool/internal/storage"
 	"lazy-tool/internal/summarizer"
+	"lazy-tool/internal/tracing"
 	"lazy-tool/internal/vector"
 )
 
@@ -25,6 +27,7 @@ type Stack struct {
 	Search     *search.Service
 	Summarizer summarizer.Summarizer
 	Embedder   embeddings.Embedder
+	Cache      *cache.Cache // nil when caching is disabled
 }
 
 func OpenStack(cfgPath string) (*Stack, error) {
@@ -49,6 +52,8 @@ func OpenStack(cfgPath string) (*Stack, error) {
 	if err != nil {
 		return nil, fmt.Errorf("sqlite: %w", err)
 	}
+	// Enable invocation stats persistence
+	tracing.SetPersister(st)
 	vi, err := vector.Open(vecPath)
 	if err != nil {
 		_ = st.Close()
@@ -66,9 +71,17 @@ func OpenStack(cfgPath string) (*Stack, error) {
 		_ = st.Close()
 		return nil, err
 	}
+	cbCooldown := time.Duration(cfg.Connectors.CircuitBreakerCooldownSeconds) * time.Second
+	if cbCooldown <= 0 && cfg.Connectors.CircuitBreakerMaxFailures > 0 {
+		cbCooldown = 30 * time.Second
+	}
 	fact := connectors.NewFactory(connectors.FactoryOpts{
 		HTTPReuseUpstreamSession: cfg.Connectors.HTTPReuseUpstreamSession,
 		HTTPReuseIdleTimeout:     time.Duration(cfg.Connectors.HTTPReuseIdleTimeoutSeconds) * time.Second,
+		CircuitBreaker: connectors.CircuitBreakerOpts{
+			MaxFailures:  cfg.Connectors.CircuitBreakerMaxFailures,
+			OpenDuration: cbCooldown,
+		},
 	})
 	sum := summarizer.New(cfg)
 	emb := embeddings.New(cfg)
@@ -79,10 +92,25 @@ func OpenStack(cfgPath string) (*Stack, error) {
 		VectorMultiplier: cfg.Search.Scoring.VectorMultiplier,
 		UserSummary:      cfg.Search.Scoring.UserSummary,
 		Favorite:         cfg.Search.Scoring.Favorite,
+		InvocationBoost:  cfg.Search.Scoring.InvocationBoost,
 	}, cfg.Search.LexicalOnly)
 	svc.FullCatalogSubstring = !cfg.Search.DisableFullCatalogSubstring
 	svc.EmptyQueryIDBatch = cfg.Search.EmptyQueryIDBatch
 	svc.EmptyQueryMaxCatalogIDs = cfg.Search.EmptyQueryMaxCatalogIDs
+
+	var c *cache.Cache
+	if cfg.Cache.Enabled {
+		maxEntries := cfg.Cache.MaxEntries
+		if maxEntries <= 0 {
+			maxEntries = 500
+		}
+		ttl := time.Duration(cfg.Cache.TTLSeconds) * time.Second
+		if ttl <= 0 {
+			ttl = 5 * time.Minute
+		}
+		c = cache.New(maxEntries, ttl, cfg.Cache.ExcludeSources)
+	}
+
 	return &Stack{
 		Cfg:        cfg,
 		Store:      st,
@@ -92,6 +120,7 @@ func OpenStack(cfgPath string) (*Stack, error) {
 		Search:     svc,
 		Summarizer: sum,
 		Embedder:   emb,
+		Cache:      c,
 	}, nil
 }
 

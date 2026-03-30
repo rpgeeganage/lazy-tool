@@ -23,4 +23,10 @@ CREATE TABLE IF NOT EXISTS capabilities (
 );
 CREATE INDEX IF NOT EXISTS idx_capabilities_source ON capabilities(source_id);
 CREATE INDEX IF NOT EXISTS idx_capabilities_canonical ON capabilities(canonical_name);
+CREATE TABLE IF NOT EXISTS invocation_stats (
+	canonical_name TEXT PRIMARY KEY,
+	invoke_count   INTEGER NOT NULL DEFAULT 0,
+	success_count  INTEGER NOT NULL DEFAULT 0,
+	last_invoked_at INTEGER NOT NULL DEFAULT 0
+);
 `

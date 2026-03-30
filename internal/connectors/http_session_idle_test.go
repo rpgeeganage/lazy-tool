@@ -62,15 +62,14 @@ func TestHTTPReuse_idleTTL_recyclesSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	gw := conn.(*GatewayConnector)
-	if _, err := gw.ListTools(ctx); err != nil {
+	if _, err := conn.ListTools(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if c := atomic.LoadInt32(&connects); c != 1 {
 		t.Fatalf("after first call: connects=%d", c)
 	}
 	time.Sleep(80 * time.Millisecond)
-	if _, err := gw.ListTools(ctx); err != nil {
+	if _, err := conn.ListTools(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if c := atomic.LoadInt32(&connects); c != 2 {

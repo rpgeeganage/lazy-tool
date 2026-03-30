@@ -30,4 +30,9 @@ type Source struct {
 	Adapter string
 	// Disabled skips indexing and proxy resolution; capabilities are removed on reindex (P2.3).
 	Disabled bool `json:"disabled,omitempty"`
+	// Fallback controls behavior when search returns zero results for this source.
+	// "passthrough" returns the full capability list (capped at limit) as a safety net.
+	Fallback string `json:"fallback,omitempty"`
+	// Env is extra environment variables passed to stdio command processes.
+	Env map[string]string `json:"env,omitempty"`
 }

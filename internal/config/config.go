@@ -18,6 +18,11 @@ type Config struct {
 			Transport string `yaml:"transport"`
 			Host      string `yaml:"host"`
 			Port      int    `yaml:"port"`
+			// Mode selects tool registration: "search" (default, 5 meta-tools), "direct" (proxy all cataloged tools), "hybrid" (both).
+			Mode string `yaml:"mode"`
+			// RefreshIntervalSeconds is how often (in seconds) direct/hybrid mode re-scans the catalog
+			// to add new tools and remove stale ones. 0 disables periodic refresh.
+			RefreshIntervalSeconds int `yaml:"refresh_interval_seconds"`
 		} `yaml:"mcp"`
 	} `yaml:"server"`
 	Storage struct {
@@ -38,6 +43,12 @@ type Config struct {
 		BaseURL   string `yaml:"base_url"`
 		APIKeyEnv string `yaml:"api_key_env"`
 	} `yaml:"embeddings"`
+	Cache struct {
+		Enabled        bool     `yaml:"enabled"`
+		MaxEntries     int      `yaml:"max_entries"`
+		TTLSeconds     int      `yaml:"ttl_seconds"`
+		ExcludeSources []string `yaml:"exclude_sources"`
+	} `yaml:"cache"`
 	Sources []SourceYAML `yaml:"sources"`
 	// Connectors controls upstream MCP client behavior (HTTP session reuse, etc.).
 	Connectors struct {
@@ -47,6 +58,10 @@ type Config struct {
 		// HTTPReuseIdleTimeoutSeconds closes a reused HTTP MCP session after this many seconds with no successful handler completion.
 		// 0 disables idle close (session lives until error or Factory.Close). Only applies when HTTPReuseUpstreamSession is true.
 		HTTPReuseIdleTimeoutSeconds int `yaml:"http_reuse_idle_timeout_seconds"`
+		// CircuitBreakerMaxFailures is the number of consecutive upstream failures before tripping the circuit for a source. 0 disables.
+		CircuitBreakerMaxFailures int `yaml:"circuit_breaker_max_failures"`
+		// CircuitBreakerCooldownSeconds is how long a tripped circuit stays open before allowing a probe call. Default: 30.
+		CircuitBreakerCooldownSeconds int `yaml:"circuit_breaker_cooldown_seconds"`
 	} `yaml:"connectors"`
 	Search struct {
 		AnthropicToolRefs bool `yaml:"anthropic_tool_refs"`
@@ -68,6 +83,7 @@ type Config struct {
 			VectorMultiplier float64 `yaml:"vector_multiplier"`
 			UserSummary      float64 `yaml:"user_summary"`
 			Favorite         float64 `yaml:"favorite"`
+			InvocationBoost  float64 `yaml:"invocation_boost"`
 		} `yaml:"scoring"`
 	} `yaml:"search"`
 }

@@ -10,6 +10,8 @@ type ScoreWeights struct {
 	UserSummary float64
 	// Favorite boosts pinned capabilities (P2.3).
 	Favorite float64
+	// InvocationBoost scales log2(1+invoke_count) for tools with prior invocations.
+	InvocationBoost float64
 }
 
 // DefaultScoreWeights matches the original hard-coded hybrid scoring.
@@ -21,6 +23,7 @@ func DefaultScoreWeights() ScoreWeights {
 		VectorMultiplier: 6,
 		UserSummary:      0.25,
 		Favorite:         0.2,
+		InvocationBoost:  0.5,
 	}
 }
 
@@ -44,6 +47,9 @@ func MergeScoreWeights(w ScoreWeights) ScoreWeights {
 	}
 	if w.Favorite > 0 {
 		d.Favorite = w.Favorite
+	}
+	if w.InvocationBoost > 0 {
+		d.InvocationBoost = w.InvocationBoost
 	}
 	return d
 }

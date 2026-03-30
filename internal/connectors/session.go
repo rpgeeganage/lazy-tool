@@ -12,6 +12,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"os/exec"
 	"path/filepath"
 
@@ -36,6 +37,12 @@ func transportFor(src models.Source, hc *http.Client) (mcp.Transport, error) {
 		cmd := exec.Command(src.Command, src.Args...) //nolint:gosec // user-configured MCP server command
 		if src.Cwd != "" {
 			cmd.Dir = filepath.Clean(src.Cwd)
+		}
+		if len(src.Env) > 0 {
+			cmd.Env = os.Environ()
+			for k, v := range src.Env {
+				cmd.Env = append(cmd.Env, k+"="+v)
+			}
 		}
 		return &mcp.CommandTransport{Command: cmd}, nil
 	default:

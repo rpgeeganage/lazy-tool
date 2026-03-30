@@ -16,6 +16,8 @@ type FactoryOpts struct {
 	HTTPReuseUpstreamSession bool
 	// HTTPReuseIdleTimeout closes the session after this duration elapses since the last successful request (sliding window). Zero disables.
 	HTTPReuseIdleTimeout time.Duration
+	// CircuitBreaker configures per-source circuit breaking. Zero MaxFailures disables.
+	CircuitBreaker CircuitBreakerOpts
 }
 
 func NewFactory(opts FactoryOpts) Factory {
@@ -26,9 +28,11 @@ func NewFactory(opts FactoryOpts) Factory {
 }
 
 type factoryImpl struct {
-	opts      FactoryOpts
-	holdersMu sync.Mutex
-	holders   map[string]*httpSessionHolder
+	opts       FactoryOpts
+	holdersMu  sync.Mutex
+	holders    map[string]*httpSessionHolder
+	breakersMu sync.Mutex
+	breakers   map[string]*CircuitBreaker
 }
 
 func (f *factoryImpl) New(ctx context.Context, src models.Source) (Connector, error) {
@@ -41,12 +45,10 @@ func (f *factoryImpl) New(ctx context.Context, src models.Source) (Connector, er
 	if f.opts.HTTPReuseUpstreamSession && src.Transport == models.TransportHTTP {
 		reuse = f.runnerFor(src, hc)
 	}
-	bc := baseConnector{src: src, httpClient: hc, httpReuse: reuse}
+	bc := &baseConnector{src: src, httpClient: hc, httpReuse: reuse}
 	switch src.Type {
-	case models.SourceTypeGateway:
-		return &GatewayConnector{baseConnector: bc}, nil
-	case models.SourceTypeServer:
-		return &ServerConnector{baseConnector: bc}, nil
+	case models.SourceTypeGateway, models.SourceTypeServer:
+		return bc, nil
 	default:
 		return nil, fmt.Errorf("unknown source type %q", src.Type)
 	}
@@ -64,6 +66,23 @@ func (f *factoryImpl) runnerFor(src models.Source, hc *http.Client) httpSessionR
 	h := &httpSessionHolder{src: src, hc: hc, idleTTL: f.opts.HTTPReuseIdleTimeout}
 	f.holders[src.ID] = h
 	return h
+}
+
+func (f *factoryImpl) CircuitBreakerFor(sourceID string) *CircuitBreaker {
+	if f.opts.CircuitBreaker.MaxFailures <= 0 {
+		return nil
+	}
+	f.breakersMu.Lock()
+	defer f.breakersMu.Unlock()
+	if f.breakers == nil {
+		f.breakers = make(map[string]*CircuitBreaker)
+	}
+	if cb, ok := f.breakers[sourceID]; ok {
+		return cb
+	}
+	cb := NewCircuitBreaker(f.opts.CircuitBreaker)
+	f.breakers[sourceID] = cb
+	return cb
 }
 
 func (f *factoryImpl) Close() error {

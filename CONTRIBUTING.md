@@ -46,8 +46,9 @@ Strong first contribution areas:
 ### Requirements
 
 - Go 1.25+
-- Python 3.11+ for benchmark tooling
+- Python 3.11+ and [uv](https://docs.astral.sh/uv/) (or pip) for benchmark tooling
 - optional: Docker and MCPJungle for the local benchmark environment
+- optional: [Ollama](https://ollama.com/) for weak-model benchmarks
 
 ### Build
 

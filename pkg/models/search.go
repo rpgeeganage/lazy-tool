@@ -14,6 +14,12 @@ const (
 	SearchCandidatePathFullCatalogSubstringDisabled = "full_catalog_substring_disabled"
 )
 
+// InvocationStat holds per-tool invocation statistics for search scoring.
+type InvocationStat struct {
+	InvokeCount  int64
+	SuccessCount int64
+}
+
 // SearchQuery is input to hybrid retrieval.
 type SearchQuery struct {
 	Text         string
@@ -29,6 +35,8 @@ type SearchQuery struct {
 	FavoriteIDs map[string]struct{}
 	// ExplainScores fills SearchResult.ScoreBreakdown with pre-ranker weight sums (part-3 ranking transparency).
 	ExplainScores bool
+	// InvocationStats maps canonical_name → stats for invocation-based relevance feedback.
+	InvocationStats map[string]InvocationStat
 }
 
 // SearchResult is one ranked hit returned to callers (MCP / CLI / UI).

@@ -10,22 +10,39 @@ import (
 	"lazy-tool/pkg/models"
 )
 
+// SanitizeSegment normalises a name fragment for use in canonical names.
+// Letters, digits, hyphens, and underscores are preserved (lowercased);
+// everything else becomes a hyphen. Runs of consecutive separators are
+// collapsed to a single character so that the double-underscore "__"
+// delimiter used between segments can never appear inside a segment.
 func SanitizeSegment(s string) string {
 	var b strings.Builder
+	prevSep := false
 	for _, r := range strings.ToLower(s) {
 		switch {
 		case unicode.IsLetter(r) || unicode.IsDigit(r):
 			b.WriteRune(r)
-		case r == '_' || r == '-':
-			b.WriteByte('_')
+			prevSep = false
+		case r == '_':
+			if !prevSep {
+				b.WriteByte('_')
+				prevSep = true
+			}
+		case r == '-':
+			if !prevSep {
+				b.WriteByte('-')
+				prevSep = true
+			}
 		default:
-			b.WriteByte('_')
+			if !prevSep {
+				b.WriteByte('-')
+				prevSep = true
+			}
 		}
 	}
-	out := strings.Trim(b.String(), "_")
-	for strings.Contains(out, "__") {
-		out = strings.ReplaceAll(out, "__", "_")
-	}
+	out := b.String()
+	// Trim leading/trailing separators.
+	out = strings.TrimFunc(out, func(r rune) bool { return r == '_' || r == '-' })
 	return out
 }
 
@@ -33,6 +50,17 @@ func NormalizeTool(src models.Source, meta connectors.ToolMeta, now time.Time) m
 	canonical := SanitizeSegment(src.ID) + "__" + SanitizeSegment(meta.Name)
 	if SanitizeSegment(meta.Name) == "" {
 		canonical = SanitizeSegment(src.ID) + "__tool"
+	}
+	metadataJSON := "{}"
+	if len(meta.AnnotationsJSON) > 0 {
+		metaObj := map[string]any{}
+		var ann any
+		if json.Unmarshal(meta.AnnotationsJSON, &ann) == nil {
+			metaObj["annotations"] = ann
+		}
+		if mb, err := json.Marshal(metaObj); err == nil {
+			metadataJSON = string(mb)
+		}
 	}
 	rec := models.CapabilityRecord{
 		ID:                  CapabilityID(src.ID, meta.Name),
@@ -45,7 +73,7 @@ func NormalizeTool(src models.Source, meta connectors.ToolMeta, now time.Time) m
 		InputSchemaJSON:     string(meta.InputSchema),
 		VersionHash:         VersionHash(meta),
 		LastSeenAt:          now,
-		MetadataJSON:        "{}",
+		MetadataJSON:        metadataJSON,
 	}
 	if rec.InputSchemaJSON == "" {
 		rec.InputSchemaJSON = "{}"

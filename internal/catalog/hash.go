@@ -13,6 +13,7 @@ func VersionHash(meta connectors.ToolMeta) string {
 	_, _ = fmt.Fprintln(h, meta.Name)
 	_, _ = fmt.Fprintln(h, meta.Description)
 	h.Write(meta.InputSchema)
+	h.Write(meta.AnnotationsJSON)
 	return hex.EncodeToString(h.Sum(nil))
 }
 

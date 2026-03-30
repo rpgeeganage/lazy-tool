@@ -1,276 +1,491 @@
 # lazy-tool
 
-> **A local-first MCP discovery runtime that reduces prompt bloat and helps agents search before they invoke.**
+The more MCP servers you connect, the more tool schemas get dumped into every prompt. The model reads all of them, picks the wrong one more often, and you pay for every token. This is a [known problem](https://arxiv.org/abs/2505.03275) — the pattern that solves it (search before invoke) is well-established.
+
+Most implementations of that pattern require a Python stack, a vector database, Docker, or a cloud service. `lazy-tool` does it as a single Go binary with a local SQLite catalog. No containers, no API keys for the tool layer, no infrastructure.
+
+```
+make build → import --write → reindex → serve
+```
+
+That's it. One binary, reads your existing IDE config, indexes everything locally, serves as an MCP endpoint.
+
+| | Direct MCP | Through lazy-tool |
+|---|---:|---:|
+| Input tokens per turn | 1,701 | 915 **(−46%)** |
+| Latency per turn | 0.232s | 0.158s **(−32%)** |
+| Tools in agent context | 47 | 5 |
+
+<sup>llama-3.1-8b-instant, 20 repeats per task. <a href="benchmark/README.md">Methodology</a></sup>
 
 [![CI](https://github.com/rpgeeganage/lazy-tool/actions/workflows/ci.yml/badge.svg)](https://github.com/rpgeeganage/lazy-tool/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Go](https://img.shields.io/badge/Go-1.25+-00ADD8.svg)](https://go.dev)
 
-## Table of contents
+---
 
-- [What this project is](#what-this-project-is)
-- [Why it exists](#why-it-exists)
-- [What makes it different](#what-makes-it-different)
-- [What it is not](#what-it-is-not)
-- [How it works](#how-it-works)
-- [Architecture](#architecture)
-- [Quick start](#quick-start)
-- [Web UI access](#web-ui-access)
-- [MCP surface exposed to agents](#mcp-surface-exposed-to-agents)
-- [Benchmark highlights](#benchmark-highlights)
-- [Benchmark visuals](#benchmark-visuals)
-- [Where lazy-tool is already strong](#where-lazy-tool-is-already-strong)
-- [Current limitations](#current-limitations)
-- [Use cases](#use-cases)
-- [Documentation map](#documentation-map)
-- [Project status](#project-status)
-- [Contributing](#contributing)
-- [Security](#security)
-- [License](#license)
+## Where it fits
 
-## What this project is
+Several projects address MCP tool sprawl in different ways: [RAG-MCP](https://github.com/fintools-ai/rag-mcp) (Python + vector DB), [MetaMCP](https://github.com/metatool-ai/metamcp) (Docker), [AWS AgentCore Gateway](https://aws.amazon.com/blogs/machine-learning/transform-your-mcp-architecture-unite-mcp-servers-through-agentcore-gateway/) (managed cloud), and Claude Code's [built-in tool search](https://modelcontextprotocol.io/specification/2025-06-18/server/tools) (client-side, Claude-only).
 
-`lazy-tool` is a **local-first, local-only MCP discovery runtime** for developers and agent builders.
+`lazy-tool` occupies a specific niche: local-first, zero-dependency, single binary.
 
-It sits in front of the MCP servers and MCP gateways you already run locally and gives agents a smaller, cleaner workflow:
+- **No infrastructure.** One Go binary, local SQLite. No Docker, no vector DB service, no cloud account.
+- **IDE auto-import.** Reads your Claude Desktop, Cursor, or VS Code MCP config. No manual YAML unless you want it.
+- **Three modes in one tool.** Search mode (5 meta-tools) for weak models, direct mode (transparent proxy) for strong models, hybrid for both. Switch with a flag.
+- **Provider-agnostic.** Not tied to Anthropic, OpenAI, or any specific client. Anything that speaks MCP over stdio or HTTP.
+- **Reliability built in.** Circuit breaking, caching, session reuse, and tracing handled at the proxy layer.
 
-1. **search** the local capability catalog
-2. **inspect** a capability if needed
-3. **invoke only the selected capability**
+If you're already inside Claude Code and only use Claude, the built-in tool search may cover your needs. If you want something that works across providers, runs locally without dependencies, and aggregates multiple MCP servers — that's the space `lazy-tool` is in.
 
-That means the model does **not** need the full upstream tool catalog in context up front.
+---
 
-## Why it exists
+## Install
 
-Raw MCP exposure does not scale well once local tool catalogs get large.
+### Quick install (pre-built binary)
 
-The pain usually shows up as:
+```bash
+curl -sSfL https://raw.githubusercontent.com/rpgeeganage/lazy-tool/main/install.sh | sh
+```
 
-- prompt bloat from large tool lists and schemas
-- weaker models choosing the wrong tool or wrapper
-- noisy local MCP sprawl across several servers or gateways
-- poor portability across model providers and runtimes
+Override the install directory (default `./bin`):
 
-`lazy-tool` exists to solve that with a **small, stable MCP surface** and a **local searchable catalog**.
+```bash
+INSTALL_DIR=/usr/local/bin curl -sSfL https://raw.githubusercontent.com/rpgeeganage/lazy-tool/main/install.sh | sh
+```
 
-## What makes it different
+### Go install
 
-The core idea is simple:
+```bash
+go install github.com/rpgeeganage/lazy-tool/cmd/lazy-tool@latest
+```
 
-> **Do not give the model the whole MCP universe. Give it discovery first, then route to the real capability only when needed.**
+### Build from source
 
-That makes `lazy-tool` closer to a **capability control layer** than a simple proxy.
+Requires Go 1.25+.
 
-Key characteristics:
+```bash
+make build            # development build → bin/lazy-tool
+make build-release    # optimized, stripped, version-stamped
+```
 
-- **local-first** — SQLite, local vector index, local process model
-- **provider-agnostic** — not tied to one vendor’s tool-search feature
-- **MCP-native** — it works with MCP servers and gateways you already use
-- **search-before-invoke** — smaller prompt surface, cleaner runtime behavior
-- **inspectable** — source health, inspect surfaces, explainable retrieval paths
+---
 
-## What it is not
+## Get started
 
-`lazy-tool` is **not**:
+If you already have MCP servers in Claude Desktop, Cursor, or VS Code:
 
-- a hosted SaaS
-- an enterprise control plane
-- a multi-tenant MCP registry
-- a Kubernetes or operator project
-- a replacement for upstream MCP servers
-- a promise that all tool-use reliability problems are solved
+```bash
+./lazy-tool import --write   # reads your IDE config, generates lazy-tool config
+./lazy-tool reindex          # indexes every tool, prompt, and resource
+./lazy-tool serve            # agent connects here instead of directly to MCP servers
+```
 
-The scope is intentionally narrower:
+Point your agent at `lazy-tool serve`. It searches for tools instead of receiving them all in context.
 
-**make local MCP ecosystems easier for agents to use.**
+No IDE config? Write a YAML file manually — see [Configuration](#configuration).
+
+---
+
+## When to use which mode
+
+- **Search mode** (default) — the agent sees 5 meta-tools and discovers capabilities through search. Reduces prompt size and improves tool selection for smaller/cheaper models (Haiku, GPT-4.1-mini, local Ollama).
+
+- **Direct mode** — every cataloged tool is exposed by name. The agent sees real schemas, lazy-tool routes transparently. For strong models that handle large tool lists fine but benefit from single-endpoint aggregation, circuit breaking, and caching.
+
+- **Hybrid mode** — both search and direct tools available. Useful for gradual migration.
+
+```bash
+lazy-tool serve                  # search (default)
+lazy-tool serve --mode direct    # direct
+lazy-tool serve --mode hybrid    # both
+```
+
+---
 
 ## How it works
 
-At a high level:
-
-1. You configure local HTTP MCP endpoints and or local stdio MCP servers under `sources:`
-2. `lazy-tool reindex` fetches tools, prompts, resources, and templates
-3. The catalog is stored locally in SQLite, with optional vector retrieval support
-4. Agents talk only to `lazy-tool`'s small MCP surface
-5. `lazy-tool` resolves and proxies the real upstream call only after capability selection
-
-## Architecture
-
-```mermaid
-flowchart LR
-    A[Agent / IDE / Host] --> B[lazy-tool MCP surface]
-
-    B --> C[search_tools]
-    B --> D[inspect_capability]
-    B --> E[invoke_proxy_tool]
-    B --> F[get_proxy_prompt]
-    B --> G[read_proxy_resource]
-
-    C --> H[(SQLite catalog)]
-    C --> I[(Vector index)]
-
-    D --> H
-    E --> J[Upstream local MCP]
-    F --> J
-    G --> J
-
-    J --> K[Local HTTP gateway]
-    J --> L[Local stdio server]
 ```
-
-### Runtime flow
+1. You configure MCP sources (or auto-import from your IDE)
+2. lazy-tool reindex fetches every tool, prompt, and resource
+3. The catalog is stored locally in SQLite with full-text search
+4. Agents connect to lazy-tool via stdio or HTTP
+5. The agent searches → finds → invokes — lazy-tool proxies to the real upstream
+```
 
 ```mermaid
 sequenceDiagram
     participant Agent
     participant LazyTool
     participant Catalog
-    participant Upstream
+    participant Upstream MCP
 
     Agent->>LazyTool: search_tools("echo")
-    LazyTool->>Catalog: lexical + optional vector retrieval
-    Catalog-->>LazyTool: ranked capabilities
-    LazyTool-->>Agent: proxy_tool_name + next step
+    LazyTool->>Catalog: lexical + optional vector search
+    Catalog-->>LazyTool: ranked results with scores
+    LazyTool-->>Agent: proxy_tool_name + input example + next step
 
-    Agent->>LazyTool: invoke_proxy_tool(proxy_tool_name, input)
-    LazyTool->>Upstream: tools/call
-    Upstream-->>LazyTool: MCP result
+    Agent->>LazyTool: invoke_proxy_tool(name, input)
+    LazyTool->>Upstream MCP: tools/call (original name)
+    Upstream MCP-->>LazyTool: result
     LazyTool-->>Agent: response
 ```
 
-## Quick start
+The agent sees 5 tools regardless of how many exist upstream:
+
+| Tool | Purpose |
+|---|---|
+| `search_tools` | Find capabilities by keyword or description |
+| `inspect_capability` | Get full schema before calling |
+| `invoke_proxy_tool` | Call an upstream tool through the proxy |
+| `get_proxy_prompt` | Fetch an upstream prompt |
+| `read_proxy_resource` | Read an upstream resource |
+
+---
+
+## Reference
+
+<details>
+<summary><strong>Table of contents</strong> (click to expand)</summary>
+
+- [Install](#install)
+- [Detailed setup](#detailed-setup)
+- [Auto-import from IDE configs](#auto-import-from-ide-configs)
+- [CLI reference](#cli-reference)
+- [Configuration](#configuration)
+- [Search algorithm](#search-algorithm)
+- [Reliability features](#reliability-features)
+- [Response cache](#response-cache)
+- [Web UI and TUI](#web-ui-and-tui)
+- [Benchmarks](#benchmarks)
+- [Current limitations](#current-limitations)
+- [Documentation map](#documentation-map)
+- [Contributing](#contributing)
+
+</details>
+
+---
+
+## Detailed setup
+
+### Prerequisites
+
+- Go 1.25+
+- At least one local MCP server or gateway running
 
 ### 1. Build
 
 ```bash
 make build
+# or: go build -o bin/lazy-tool ./cmd/lazy-tool
 ```
 
-### 2. Configure local sources
+### 2. Configure
 
-Start from `configs/example.yaml` and point `sources:` at MCP servers or gateways you already run.
-
-### 3. Reindex
+**Option A: Auto-import from your IDE** (recommended)
 
 ```bash
-export LAZY_TOOL_CONFIG=$PWD/configs/example.yaml
+# Discovers MCP servers from Claude Desktop, Cursor, and VS Code
+./bin/lazy-tool import --write
+export LAZY_TOOL_CONFIG=~/.lazy-tool/config.yaml
+```
+
+**Option B: Write config manually**
+
+```bash
+cp configs/example.yaml my-config.yaml
+export LAZY_TOOL_CONFIG=$PWD/my-config.yaml
+```
+
+Minimal config:
+
+```yaml
+app:
+  name: my-tools
+
+storage:
+  sqlite_path: ./data/lazy-tool.db
+
+sources:
+  - id: my-gateway
+    type: gateway
+    transport: http
+    url: http://localhost:8811/mcp
+
+  - id: my-stdio-server
+    type: server
+    transport: stdio
+    command: npx
+    args: ["-y", "@your-scope/your-server"]
+    env:
+      API_KEY: "your-key"
+```
+
+### 3. Index the catalog
+
+```bash
 ./bin/lazy-tool reindex
 ./bin/lazy-tool sources --status
 ```
 
-### 4. Search the catalog
+### 4. Search
 
 ```bash
 ./bin/lazy-tool search "echo" --limit 5
-./bin/lazy-tool search "prompt" --limit 5
-./bin/lazy-tool search "resource" --limit 5
+./bin/lazy-tool search "file management" --explain-scores
 ```
 
-### 5. Run as an MCP server
+### 5. Serve as MCP
 
 ```bash
+# Search mode (default): 5 meta-tools, search-first workflow
 ./bin/lazy-tool serve
+
+# Direct mode: all cataloged tools exposed as first-class MCP tools
+./bin/lazy-tool serve --mode direct
+
+# HTTP transport: serve over HTTP instead of stdio
+./bin/lazy-tool serve --mode direct --transport http --addr :8080
 ```
 
-### 6. Optional local UIs
+Point your agent or IDE at `lazy-tool serve` as an MCP server. In HTTP mode, connect Claude Desktop to `http://localhost:8080/mcp`.
+
+### 6. Optional UIs
 
 ```bash
-./bin/lazy-tool web --addr 127.0.0.1:8765
-./bin/lazy-tool tui
+./bin/lazy-tool web --addr 127.0.0.1:8765   # browser UI
+./bin/lazy-tool tui                           # terminal UI
 ```
 
-When the Web UI starts, `lazy-tool` should print the local URL so users can open it immediately in a browser.
+---
 
-## Web UI access
+## Auto-import from IDE configs
 
-The Web UI is **accessible by default on localhost only**:
-
-```text
-http://127.0.0.1:8765
-```
-
-- **default:** safe local access for the end user
-- **not default:** network exposure
-
-If you explicitly want LAN access, you can override the bind address:
+`lazy-tool` can automatically discover MCP server configurations from Claude Desktop, Cursor, and VS Code — no manual YAML writing needed.
 
 ```bash
-./bin/lazy-tool web --addr 0.0.0.0:8765
+# Preview what would be imported (prints YAML to stdout)
+lazy-tool import
+
+# Import from a specific IDE
+lazy-tool import --from claude
+lazy-tool import --from cursor
+lazy-tool import --from vscode
+
+# Write config directly
+lazy-tool import --write
+lazy-tool import --write --output my-config.yaml
 ```
 
-For a local-first tool, `127.0.0.1` is the correct default.
+Supported config file locations:
+- **Claude Desktop**: `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS), `%APPDATA%\Claude\claude_desktop_config.json` (Windows)
+- **Cursor**: `~/.cursor/mcp.json`
+- **VS Code**: `~/.vscode/mcp.json`
 
-## MCP surface exposed to agents
+---
 
-The public MCP surface should stay intentionally small.
+## CLI reference
 
-Current agent-facing tools:
+| Command | Description |
+|---|---|
+| `serve` | Run as MCP server (stdio or HTTP) with mode selection |
+| `search <query>` | Search the catalog from CLI (JSON output) |
+| `reindex` | Fetch upstream capabilities and rebuild the local catalog |
+| `inspect <proxy_tool_name>` | Show full details for one indexed capability |
+| `import` | Auto-discover MCP servers from Claude Desktop, Cursor, VS Code |
+| `health` | Verify config and report basic status |
+| `sources` | List configured MCP sources |
+| `web` | Launch the browser-based UI |
+| `tui` | Launch the interactive terminal UI |
+| `pin add\|remove\|list` | Manage favorite capabilities (boosted in search) |
+| `catalog export\|import\|set-summary` | Catalog management and manual summary overrides |
+| `cache-clear` | Clear the response cache |
+| `version` | Print version and git commit |
 
-- `search_tools`
-- `inspect_capability`
-- `invoke_proxy_tool`
-- `get_proxy_prompt`
-- `read_proxy_resource`
+All commands accept `--config <path>` or read from `LAZY_TOOL_CONFIG`.
 
-That small surface is part of the product value.
+---
 
-## Benchmark highlights
+## Configuration
 
-These are the current **headline** numbers worth publishing from the clean local benchmark suite.
+Full reference in [`configs/example.yaml`](configs/example.yaml). Key sections:
 
-**Snapshot**
-- **Date:** 2026-03-29
-- **Model:** `llama-3.1-8b-instant`
-- **Repeats per task:** 20
-- **Mode:** direct MCPJungle vs `lazy-tool` stdio wrapper
+### Sources
 
-### Baseline: no-tool turn
+```yaml
+sources:
+  - id: my-http               # unique identifier (required)
+    type: gateway              # gateway | server
+    transport: http            # http | stdio
+    url: http://127.0.0.1:8811/mcp
 
-| Scenario | Avg input tokens | Avg latency |
-|---|---:|---:|
-| Direct MCP gateway | 1701 | 0.232s |
-| `lazy-tool` stdio | 915 | 0.158s |
+  - id: my-stdio
+    type: server
+    transport: stdio
+    command: npx
+    args: ["-y", "@scope/server"]
+    cwd: /path/to/project      # optional working directory
+    env:                        # optional env vars for stdio process
+      API_KEY: "your-key"
+      NODE_ENV: "production"
 
-**Result**
-- **46.2% lower input tokens**
-- **31.9% lower average latency**
+  - id: disabled-source
+    type: gateway
+    transport: http
+    url: http://127.0.0.1:9000/mcp
+    disabled: true              # excluded from indexing and proxy
 
-### Discovery/search tasks
-
-| Task | Mode | Result |
-|---|---|---:|
-| `search_tools_smoke` | lazy-only | 20/20 |
-| `search_tools_resource` | lazy-only | 18/20 |
-| `search_tools_prompt` | lazy-only | 16/20 |
-
-### Benchmark interpretation
-
-These numbers support a narrow, honest claim:
-
-> `lazy-tool` can materially reduce prompt overhead on no-tool turns while providing a working discovery surface for local MCP catalogs.
-
-They do **not** mean:
-- all end-to-end tool invocation is fully reliable
-- all smaller models behave well on every task
-- the project is finished
-
-For the full benchmark methodology, reproducibility steps, and publishing rules, see [benchmark/README.md](benchmark/README.md).
-
-**Visuals:** bar and line charts for these numbers live under [Benchmark visuals](#benchmark-visuals) (Mermaid on GitHub). For Chart.js in the browser, open [docs/benchmark-charts.html](docs/benchmark-charts.html) locally (same data; tables here stay canonical).
-
-## Benchmark visuals
-
-### What the benchmark measures
-
-```mermaid
-flowchart TD
-    A[Direct MCP gateway] --> C[Benchmark harness]
-    B[lazy-tool stdio] --> C
-    C --> D[Repeated runs]
-    D --> E[Input tokens]
-    D --> F[Latency]
-    D --> G[Task success]
+  - id: fallback-source
+    type: gateway
+    transport: http
+    url: http://127.0.0.1:9001/mcp
+    fallback: passthrough       # returns full catalog when search has zero results
 ```
 
-### Token reduction on a no-tool turn
+### Storage
+
+```yaml
+storage:
+  sqlite_path: ./data/lazy-tool.db    # required
+  vector_path: ./data/vector          # optional (defaults to {sqlite_dir}/vector)
+  history_path: ./data/history.log    # optional: append-only search query log
+```
+
+### Connectors (reliability)
+
+```yaml
+connectors:
+  http_reuse_upstream_session: true     # reuse one HTTP session per source
+  http_reuse_idle_timeout_seconds: 300  # close idle sessions after 5 min
+  circuit_breaker_max_failures: 3       # trip after 3 consecutive failures (0 = disabled)
+  circuit_breaker_cooldown_seconds: 30  # cooldown before half-open probe
+```
+
+### Embeddings (optional semantic search)
+
+```yaml
+embeddings:
+  provider: ollama                     # noop | ollama | openai-compatible
+  model: nomic-embed-text
+  base_url: http://127.0.0.1:11434
+```
+
+### Summarization (optional LLM descriptions)
+
+```yaml
+summary:
+  provider: openai-compatible
+  model: gpt-4.1-mini
+  enabled: true
+  base_url: https://api.openai.com/v1
+  api_key_env: OPENAI_API_KEY
+```
+
+### Server
+
+```yaml
+server:
+  mcp:
+    transport: stdio            # stdio | http
+    mode: search                # search | direct | hybrid
+    host: ""                    # for HTTP transport
+    port: 8080                  # for HTTP transport
+```
+
+### Search tuning
+
+```yaml
+search:
+  lexical_only: false
+  anthropic_tool_refs: false    # adds anthropic.suggested_tool_use per hit
+  aliases:
+    k8s: "kubernetes cluster management"
+  scoring:
+    exact_canonical: 10         # exact match on proxy_tool_name
+    exact_name: 8               # exact match on original tool name
+    substring: 2                # substring match in name/summary/tags
+    vector_multiplier: 6        # semantic similarity weight
+    user_summary: 0.25          # boost for manually edited summaries
+    favorite: 0.2               # boost for pinned capabilities
+    invocation_boost: 0.5       # boost for previously invoked tools (learning signal)
+```
+
+### Response cache
+
+```yaml
+cache:
+  enabled: false                # opt-in
+  max_entries: 500              # LRU eviction when full
+  ttl_seconds: 300              # 5 min default
+  exclude_sources:              # sources that should never be cached
+    - mutation-heavy-source
+```
+
+---
+
+## Search algorithm
+
+`lazy-tool` uses **hybrid retrieval** combining lexical and optional vector search.
+
+```
+query("echo")
+  → Tokenize
+  → [Optional] Generate query embedding
+  → Lexical candidates: exact name → FTS5 BM25 → substring fallback
+  → Vector candidates: cosine similarity (top N)
+  → Merge + deduplicate
+  → Score: exact match (10) + name match (8) + substring (2) + vector (6) + history + favorites
+  → Rank, normalize [0,1], return with scores and why_matched
+```
+
+Every result includes `why_matched` explaining which signals contributed. Pass `--explain-scores` for full numeric breakdown.
+
+---
+
+## Reliability features
+
+### Circuit breaker
+
+Per-source circuit breaker protects against cascading failures from unhealthy upstreams.
+
+```
+Closed ──[max_failures]──▶ Open ──[cooldown]──▶ Half-Open
+  ▲                                                │
+  └──────────[success]─────────────────────────────┘
+```
+
+### HTTP session reuse
+
+One MCP session per source, kept until idle timeout or error. Reduces handshake overhead for frequently called sources.
+
+### Passthrough fallback
+
+Sources with `fallback: passthrough` return their full catalog when search returns zero results — a safety net that prevents the agent from being completely blind.
+
+---
+
+## Response cache
+
+When enabled, `lazy-tool` caches upstream responses in memory (LRU + TTL). Keyed by SHA-256 of tool name + input arguments. Per-source exclusion for mutation-heavy tools. Cache hits visible in trace logs and web UI.
+
+```bash
+lazy-tool cache-clear
+```
+
+---
+
+## Web UI and TUI
+
+```bash
+./bin/lazy-tool web --addr 127.0.0.1:8765   # browser UI: search, inspect, traces
+./bin/lazy-tool tui                           # terminal UI: bubbletea-based
+```
+
+---
+
+## Benchmarks
+
+### Token and latency reduction
 
 ```mermaid
 xychart-beta
@@ -280,8 +495,6 @@ xychart-beta
     bar [1701, 915]
 ```
 
-### Latency comparison on a no-tool turn
-
 ```mermaid
 xychart-beta
     title "No-tool baseline: average latency (seconds)"
@@ -290,97 +503,66 @@ xychart-beta
     bar [0.232, 0.158]
 ```
 
-### Discovery task reliability snapshot
+### Discovery reliability
 
-```mermaid
-xychart-beta
-    title "Discovery tasks: success count out of 20"
-    x-axis ["Smoke", "Resource", "Prompt"]
-    y-axis "Successful runs" 0 --> 20
-    bar [20, 18, 16]
+| Task | Result |
+|---|---:|
+| `search_tools_smoke` | 20/20 |
+| `search_tools_resource` | 18/20 |
+| `search_tools_prompt` | 16/20 |
+
+### Multi-provider suite
+
+Tests Groq, Anthropic, and OpenAI across all three modes (baseline, search, direct). Routed tasks verify end-to-end: search, invoke, and response validation.
+
+```bash
+make bench-strong                # full suite (auto-detects API keys)
+make bench-strong-test           # unit tests (no API keys needed)
 ```
 
-```mermaid
-xychart-beta
-    title "Discovery tasks: same data as a line (trend across tasks)"
-    x-axis ["Smoke", "Resource", "Prompt"]
-    y-axis "Successful runs" 0 --> 20
-    line [20, 18, 16]
+### Weak-model (Ollama) suite
+
+Tests local models (qwen2.5:3b, llama3.2:3b, phi3:mini, gemma2:2b) to prove search mode helps small models. Three tiers: basic tool-calling, search navigation, and deterministic search quality.
+
+```bash
+make bench-weak                  # full suite (needs Ollama)
+make bench-weak-test             # unit tests (no Ollama needed)
+make bench-weak-validate         # validate golden data
 ```
 
-**Interactive charts (bar + line in the browser):** open [docs/benchmark-charts.html](docs/benchmark-charts.html) locally (double-click or `open docs/benchmark-charts.html`).
+Full methodology: [benchmark/README.md](benchmark/README.md)
 
-These charts are visual summaries only. The tables above remain the source of truth for precise benchmark claims.
-
-## Where lazy-tool is already strong
-
-Today the repo is strongest in these areas:
-
-- reducing token overhead when no tool is needed
-- local discovery over larger MCP catalogs
-- clear local-only positioning
-- source-health visibility after reindex
-- inspect and debug surfaces
-- benchmark and CI discipline
+---
 
 ## Current limitations
 
-This project is honest about where it is still rough.
+- Tool choice can still be model-sensitive on routed tasks (search mode)
+- Response cache is in-memory only (lost on restart)
+- Invocation-based learning requires enough usage data to be effective
+- Direct mode tool list is static until the next `reindex`
 
-Current limitations include:
-
-- wrapper and tool choice can still be model-sensitive on routed tasks
-- some end-to-end lazy invocation paths are not README-grade yet
-- search tuning is still evolving
-- the configuration surface needs discipline to avoid knob creep
-- local reliability is improving, but not solved forever
-
-That honesty is important. Overclaiming kills trust.
-
-## Use cases
-
-`lazy-tool` is a good fit when you have:
-
-- multiple local MCP servers or a large local MCP gateway
-- weaker or cheaper models that struggle with large tool surfaces
-- a need to reduce prompt bloat
-- a local development workflow where you want discovery and routing separated
-- a desire for a smaller, more inspectable MCP interface
+---
 
 ## Documentation map
 
-- **Setup, positioning, benchmark highlights:** this file
-- **Benchmark charts (Mermaid + optional interactive HTML):** [Benchmark visuals](#benchmark-visuals) · [docs/benchmark-charts.html](docs/benchmark-charts.html)
-- **Full benchmark methodology and publishing rules:** [benchmark/README.md](benchmark/README.md)
-- **Plugging existing MCPs into lazy-tool:** [docs/plugging-existing-mcps.md](docs/plugging-existing-mcps.md)
-- **Documentation hub:** [docs/README.md](docs/README.md)
-- **Local MCPJungle helpers:** [benchmark/mcpjungle-dev/README.md](benchmark/mcpjungle-dev/README.md)
+| Document | Contents |
+|---|---|
+| **This file** | Value prop, quick start, reference |
+| [docs/plugging-existing-mcps.md](docs/plugging-existing-mcps.md) | Connect `lazy-tool` to your existing MCP servers |
+| [benchmark/README.md](benchmark/README.md) | Full benchmark methodology and reproducibility |
+| [docs/benchmark-charts.html](docs/benchmark-charts.html) | Interactive Chart.js visualizations |
+| [configs/example.yaml](configs/example.yaml) | Annotated reference config |
+| [docs/README.md](docs/README.md) | Documentation hub |
 
-## Project status
-
-This project is **past the toy stage**, but still actively hardening.
-
-Current repository shape includes:
-
-- Go CLI
-- MCP stdio server
-- SQLite catalog
-- optional vector index
-- Web UI
-- TUI
-- benchmark harness
-- source health and inspect surfaces
-- CI checks for code and benchmark artifacts
-
-That means the repo is useful today, but still improving.
+---
 
 ## Contributing
 
 Contributions are welcome, especially around:
 
-- runtime hardening
-- search explainability and discipline
-- benchmark realism
+- runtime hardening and edge cases
+- search explainability and retrieval quality
+- benchmark realism and new task types
 - documentation quality
 - local integration ergonomics
 
@@ -394,4 +576,4 @@ See: [SECURITY.md](SECURITY.md)
 
 ## License
 
-Add or link your project license here once finalized.
+MIT. See [LICENSE](LICENSE).

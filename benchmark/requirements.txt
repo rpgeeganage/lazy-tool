@@ -1,2 +1,3 @@
-# Groq agent + MCP client (streamable HTTP + stdio) for run_groq_benchmark_v2.py
-pydantic-ai-slim[groq,mcp]
+# Multi-provider agent + MCP client for benchmark harnesses
+# Groq (original), Anthropic (Claude), OpenAI (GPT-4)
+pydantic-ai-slim[groq,anthropic,openai,mcp]

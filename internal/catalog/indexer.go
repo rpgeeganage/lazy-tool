@@ -121,6 +121,99 @@ func (ix *Indexer) Run(ctx context.Context) error {
 	return nil
 }
 
+// DryRunResult summarizes what a reindex would do without writing anything.
+type DryRunResult struct {
+	PerSource []DryRunSourceResult
+}
+
+// DryRunSourceResult is the diff for one source.
+type DryRunSourceResult struct {
+	SourceID  string
+	New       int
+	Updated   int
+	Unchanged int
+	Stale     int
+	Error     error
+}
+
+// DryRun connects to all sources and computes what a reindex would change, without writing to the database.
+func (ix *Indexer) DryRun(ctx context.Context) (DryRunResult, error) {
+	if ix.Log == nil {
+		ix.Log = slog.Default()
+	}
+	sources := ix.Registry.All()
+	var result DryRunResult
+	for _, src := range sources {
+		sr := ix.dryRunSource(ctx, src)
+		result.PerSource = append(result.PerSource, sr)
+	}
+	return result, nil
+}
+
+func (ix *Indexer) dryRunSource(ctx context.Context, src models.Source) DryRunSourceResult {
+	sr := DryRunSourceResult{SourceID: src.ID}
+	conn, err := ix.Factory.New(ctx, src)
+	if err != nil {
+		sr.Error = err
+		return sr
+	}
+	defer func() { _ = conn.Close() }()
+
+	snap, err := conn.ListForIndex(ctx)
+	if err != nil {
+		sr.Error = err
+		return sr
+	}
+
+	now := time.Now()
+	seen := make(map[string]struct{})
+
+	checkRecord := func(rec models.CapabilityRecord) {
+		seen[rec.ID] = struct{}{}
+		old, gerr := ix.Store.GetCapability(ctx, rec.ID)
+		if errors.Is(gerr, sql.ErrNoRows) {
+			sr.New++
+		} else if gerr != nil {
+			sr.New++ // assume new on error
+		} else if old.VersionHash != rec.VersionHash {
+			sr.Updated++
+		} else {
+			sr.Unchanged++
+		}
+	}
+
+	for _, meta := range snap.Tools {
+		checkRecord(NormalizeTool(src, meta, now))
+	}
+	if snap.PromptsErr == nil {
+		for _, meta := range snap.Prompts {
+			checkRecord(NormalizePrompt(src, meta, now))
+		}
+	}
+	if snap.ResourcesErr == nil {
+		for _, meta := range snap.Resources {
+			checkRecord(NormalizeResource(src, meta, now))
+		}
+	}
+	if snap.ResourceTemplatesErr == nil {
+		for _, meta := range snap.ResourceTemplates {
+			checkRecord(NormalizeResourceTemplate(src, meta, now))
+		}
+	}
+
+	// Count stale: existing records for this source that weren't seen upstream.
+	existing, err := ix.Store.ListBySource(ctx, src.ID)
+	if err == nil {
+		for _, rec := range existing {
+			if _, ok := seen[rec.ID]; !ok {
+				sr.Stale++
+			}
+		}
+	}
+
+	return sr
+}
+
 func (ix *Indexer) enrichAndAppend(ctx context.Context, rec *models.CapabilityRecord, pending *[]pendingRow) error {
 	old, gerr := ix.Store.GetCapability(ctx, rec.ID)
 	if gerr == nil {

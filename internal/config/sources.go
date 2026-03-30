@@ -11,15 +11,17 @@ import (
 
 // SourceYAML is one entry under `sources:` in the config file.
 type SourceYAML struct {
-	ID        string   `yaml:"id"`
-	Type      string   `yaml:"type"`
-	Transport string   `yaml:"transport"`
-	URL       string   `yaml:"url"`
-	Command   string   `yaml:"command"`
-	Args      []string `yaml:"args"`
-	Cwd       string   `yaml:"cwd"`
-	Adapter   string   `yaml:"adapter"`
-	Disabled  bool     `yaml:"disabled"`
+	ID        string            `yaml:"id"`
+	Type      string            `yaml:"type"`
+	Transport string            `yaml:"transport"`
+	URL       string            `yaml:"url"`
+	Command   string            `yaml:"command"`
+	Args      []string          `yaml:"args"`
+	Cwd       string            `yaml:"cwd"`
+	Adapter   string            `yaml:"adapter"`
+	Disabled  bool              `yaml:"disabled"`
+	Fallback  string            `yaml:"fallback"`
+	Env       map[string]string `yaml:"env"`
 }
 
 // NormalizeSources validates YAML entries and returns model sources.
@@ -111,6 +113,21 @@ func normalizeOneSource(index int, e SourceYAML, seen map[string]struct{}) (mode
 		}
 	}
 
+	fb := strings.TrimSpace(strings.ToLower(e.Fallback))
+	switch fb {
+	case "", "passthrough":
+	default:
+		return models.Source{}, fmt.Errorf("%s (%q): fallback must be empty or \"passthrough\" (got %q)", prefix, id, fb)
+	}
+
+	var envMap map[string]string
+	if len(e.Env) > 0 {
+		envMap = make(map[string]string, len(e.Env))
+		for k, v := range e.Env {
+			envMap[k] = v
+		}
+	}
+
 	return models.Source{
 		ID:        id,
 		Type:      models.SourceType(st),
@@ -121,5 +138,7 @@ func normalizeOneSource(index int, e SourceYAML, seen map[string]struct{}) (mode
 		Cwd:       cwd,
 		Adapter:   ad,
 		Disabled:  e.Disabled,
+		Fallback:  fb,
+		Env:       envMap,
 	}, nil
 }

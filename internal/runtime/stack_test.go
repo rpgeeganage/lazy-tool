@@ -22,6 +22,10 @@ func (f *stubFactory) New(ctx context.Context, src models.Source) (connectors.Co
 	panic("stubFactory.New not used in Close tests")
 }
 
+func (f *stubFactory) CircuitBreakerFor(sourceID string) *connectors.CircuitBreaker {
+	return nil
+}
+
 func (f *stubFactory) Close() error {
 	f.closed++
 	return f.closeErr

@@ -1,22 +1,16 @@
-package ranking
+package search
 
 import (
-	"context"
 	"math"
 	"sort"
 
 	"lazy-tool/pkg/models"
 )
 
-// Default ranker: primary sort by score, secondary by proxy name (spec §14 final ordering).
-// Normalizes scores to approximately [0,1] on the result set (spec §12.1 example).
-// Lexical score (including optional user-summary boost from search.Service) is already applied before Rank.
-type Default struct{}
-
-func (Default) Rank(ctx context.Context, q models.SearchQuery, in []models.SearchResult) (models.RankedResults, error) {
-	_ = ctx
+// rankResults applies primary sort, limit, normalize, and rerank to produce final ordered results.
+func rankResults(q models.SearchQuery, in []models.SearchResult) models.RankedResults {
 	if len(in) == 0 {
-		return models.RankedResults{}, nil
+		return models.RankedResults{}
 	}
 
 	sort.SliceStable(in, func(i, j int) bool {
@@ -36,7 +30,7 @@ func (Default) Rank(ctx context.Context, q models.SearchQuery, in []models.Searc
 
 	normalizeScores01(in)
 	rerankStable(in)
-	return models.RankedResults{Results: in}, nil
+	return models.RankedResults{Results: in}
 }
 
 func normalizeScores01(in []models.SearchResult) {

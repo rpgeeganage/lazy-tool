@@ -38,10 +38,15 @@ func toolsToMeta(tools []*mcp.Tool) []ToolMeta {
 		if t.InputSchema != nil {
 			b, _ = json.Marshal(t.InputSchema)
 		}
+		var annJSON []byte
+		if t.Annotations != nil {
+			annJSON, _ = json.Marshal(t.Annotations)
+		}
 		out = append(out, ToolMeta{
-			Name:        t.Name,
-			Description: t.Description,
-			InputSchema: b,
+			Name:            t.Name,
+			Description:     t.Description,
+			InputSchema:     b,
+			AnnotationsJSON: annJSON,
 		})
 	}
 	return out

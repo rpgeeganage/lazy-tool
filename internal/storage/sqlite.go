@@ -54,6 +54,58 @@ func OpenSQLite(path string) (*SQLiteStore, error) {
 
 func (s *SQLiteStore) Close() error { return s.db.Close() }
 
+// InvocationStat holds per-tool invocation statistics.
+type InvocationStat struct {
+	CanonicalName string
+	InvokeCount   int64
+	SuccessCount  int64
+	LastInvokedAt time.Time
+}
+
+// RecordInvocation upserts an invocation stat row for the given canonical tool name.
+func (s *SQLiteStore) RecordInvocation(ctx context.Context, canonicalName string, ok bool) error {
+	now := time.Now().Unix()
+	successInc := 0
+	if ok {
+		successInc = 1
+	}
+	_, err := s.db.ExecContext(ctx, `
+INSERT INTO invocation_stats (canonical_name, invoke_count, success_count, last_invoked_at)
+VALUES (?, 1, ?, ?)
+ON CONFLICT(canonical_name) DO UPDATE SET
+	invoke_count = invoke_count + 1,
+	success_count = success_count + ?,
+	last_invoked_at = ?
+`, canonicalName, successInc, now, successInc, now)
+	return err
+}
+
+// GetInvocationStats returns invocation stats for the given canonical names.
+func (s *SQLiteStore) GetInvocationStats(ctx context.Context, canonicalNames []string) (map[string]InvocationStat, error) {
+	if len(canonicalNames) == 0 {
+		return nil, nil
+	}
+	ph := placeholders(len(canonicalNames))
+	q := `SELECT canonical_name, invoke_count, success_count, last_invoked_at FROM invocation_stats WHERE canonical_name IN (` + ph + `)`
+	args := anySlice(canonicalNames)
+	rows, err := s.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	out := make(map[string]InvocationStat, len(canonicalNames))
+	for rows.Next() {
+		var st InvocationStat
+		var lastAt int64
+		if err := rows.Scan(&st.CanonicalName, &st.InvokeCount, &st.SuccessCount, &lastAt); err != nil {
+			return nil, err
+		}
+		st.LastInvokedAt = time.Unix(lastAt, 0)
+		out[st.CanonicalName] = st
+	}
+	return out, rows.Err()
+}
+
 func encodeFloat32(v []float32) []byte {
 	if len(v) == 0 {
 		return nil
@@ -160,14 +212,8 @@ FROM capabilities WHERE canonical_name=?`, canonical)
 	return scanRec(row)
 }
 
-func (s *SQLiteStore) listRows(ctx context.Context, query string, arg any) ([]models.CapabilityRecord, error) {
-	var rows *sql.Rows
-	var err error
-	if arg == nil {
-		rows, err = s.db.QueryContext(ctx, query)
-	} else {
-		rows, err = s.db.QueryContext(ctx, query, arg)
-	}
+func (s *SQLiteStore) listRows(ctx context.Context, query string, args ...any) ([]models.CapabilityRecord, error) {
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -202,12 +248,21 @@ SELECT id, kind, source_id, source_type, canonical_name, original_name, original
 FROM capabilities WHERE source_id=? ORDER BY canonical_name`, sourceID)
 }
 
+// ListBySourceWithLimit returns up to limit capabilities for a source, ordered by canonical_name.
+func (s *SQLiteStore) ListBySourceWithLimit(ctx context.Context, sourceID string, limit int) ([]models.CapabilityRecord, error) {
+	return s.listRows(ctx, `
+SELECT id, kind, source_id, source_type, canonical_name, original_name, original_description,
+	generated_summary, user_summary, search_text, input_schema_json, metadata_json, tags_json,
+	embedding_model, embedding_vector, version_hash, last_seen_at
+FROM capabilities WHERE source_id=? ORDER BY canonical_name LIMIT ?`, sourceID, limit)
+}
+
 func (s *SQLiteStore) ListAll(ctx context.Context) ([]models.CapabilityRecord, error) {
 	return s.listRows(ctx, `
 SELECT id, kind, source_id, source_type, canonical_name, original_name, original_description,
 	generated_summary, user_summary, search_text, input_schema_json, metadata_json, tags_json,
 	embedding_model, embedding_vector, version_hash, last_seen_at
-FROM capabilities ORDER BY source_id, canonical_name`, nil)
+FROM capabilities ORDER BY source_id, canonical_name`)
 }
 
 // ListAllIDs returns capability ids in the same order as ListAll (source_id, canonical_name).

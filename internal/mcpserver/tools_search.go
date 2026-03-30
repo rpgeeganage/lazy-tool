@@ -317,10 +317,75 @@ func runSearchPipeline(ctx context.Context, stack *runtime.Stack, query string, 
 		return ranked, err
 	}
 	ranked = filterRankedByRegistry(stack, ranked)
+	// Passthrough fallback: when search returns zero results, check for sources with fallback=passthrough
+	// and return their full catalog entries as a safety net.
+	if len(ranked.Results) == 0 && strings.TrimSpace(query) != "" {
+		ranked = applyPassthroughFallback(ctx, stack, ranked, limit, sourceIDs)
+	}
 	if groupBySource && len(ranked.Results) > 0 {
 		ranked.Grouped = search.GroupResultsBySource(ranked.Results)
 	}
 	return ranked, nil
+}
+
+// applyPassthroughFallback returns catalog entries from sources configured with fallback=passthrough
+// when search returned zero results. This prevents the agent from being completely blind.
+func applyPassthroughFallback(ctx context.Context, stack *runtime.Stack, ranked models.RankedResults, limit int, sourceIDs []string) models.RankedResults {
+	if stack == nil || stack.Registry == nil || stack.Store == nil {
+		return ranked
+	}
+	passthroughSources := stack.Registry.SourcesWithFallback("passthrough")
+	if len(passthroughSources) == 0 {
+		return ranked
+	}
+	remaining := limit
+	if remaining <= 0 {
+		remaining = 10
+	}
+	var results []models.SearchResult
+	for _, src := range passthroughSources {
+		if !sourceAllowedPassthrough(src.ID, sourceIDs) {
+			continue
+		}
+		recs, err := stack.Store.ListBySourceWithLimit(ctx, src.ID, remaining)
+		if err != nil {
+			continue
+		}
+		for _, rec := range recs {
+			results = append(results, models.SearchResult{
+				Kind:          rec.Kind,
+				ProxyToolName: rec.CanonicalName,
+				SourceID:      rec.SourceID,
+				Summary:       rec.EffectiveSummary(),
+				Score:         0.01,
+				WhyMatched:    []string{"fallback:passthrough"},
+				CapabilityID:  rec.ID,
+			})
+		}
+		remaining = limit - len(results)
+		if remaining <= 0 {
+			break
+		}
+	}
+	if len(results) == 0 {
+		return ranked
+	}
+	metrics.PassthroughFallbackActivated(len(results))
+	ranked.Results = results
+	ranked.CandidatePath = "passthrough_fallback"
+	return ranked
+}
+
+func sourceAllowedPassthrough(sourceID string, filter []string) bool {
+	if len(filter) == 0 {
+		return true
+	}
+	for _, id := range filter {
+		if id == sourceID {
+			return true
+		}
+	}
+	return false
 }
 
 func applySearchAliases(cfg *config.Config, q string) string {

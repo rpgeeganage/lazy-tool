@@ -8,12 +8,12 @@ set -euo pipefail
 #   - performs preflight catalog sanity checks
 #
 # Usage:
-#   ./run_readme_benchmark_suite.sh
-#   ./run_readme_benchmark_suite.sh --model llama-3.1-8b-instant --repeat 20
-#   ./run_readme_benchmark_suite.sh --output-dir ./benchmark-results --skip-build
+#   ./benchmark/run_readme_benchmark_suite.sh
+#   ./benchmark/run_readme_benchmark_suite.sh --model llama-3.1-8b-instant --repeat 20
+#   ./benchmark/run_readme_benchmark_suite.sh --output-dir ./benchmark-results --skip-build
 #
 # Assumptions:
-#   - run from the lazy-tool repo root (or pass --repo-root)
+#   - run from the lazy-tool repo root or via benchmark/ (auto-resolves repo root)
 #   - GROQ_API_KEY is exported
 #   - MCPJungle is already running locally and sample MCPs are registered
 #   - benchmark/configs/mcpjungle-lazy-tool.yaml exists and is valid
@@ -83,7 +83,7 @@ if [[ -z "${GROQ_API_KEY:-}" ]]; then
 fi
 
 if [[ -z "$REPO_ROOT" ]]; then
-  REPO_ROOT="$(pwd)"
+  REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 fi
 
 if [[ ! -f "$REPO_ROOT/benchmark/run_groq_benchmark_v2.py" ]]; then
@@ -115,6 +115,11 @@ fi
 HARNESS="$REPO_ROOT/benchmark/run_groq_benchmark_v2.py"
 LAZY_BINARY="$REPO_ROOT/bin/lazy-tool"
 
+# ── Python dependencies ──────────────────────────────────────────────────
+
+# shellcheck source=scripts/ensure-python-deps.sh
+source "$REPO_ROOT/benchmark/scripts/ensure-python-deps.sh" "$REPO_ROOT"
+
 COMMON_ARGS=(
   --model "$MODEL"
   --repeat "$REPEAT"
@@ -135,7 +140,7 @@ run_task() {
   local csv="$OUTPUT_DIR/raw/${name}.csv"
 
   echo "==> Running task: $name"
-  python3 "$HARNESS" \
+  "$PYTHON" "$HARNESS" \
     "${COMMON_ARGS[@]}" \
     "$@" \
     --jsonl-out "$jsonl" \
@@ -155,7 +160,7 @@ preflight_check() {
   "$LAZY_BINARY" search "prompt" --limit 10 | tee "$OUTPUT_DIR/preflight_search_prompt.json"
   "$LAZY_BINARY" search "resource" --limit 10 | tee "$OUTPUT_DIR/preflight_search_resource.json"
 
-  python3 "$(dirname "$0")/validate_preflight.py" \
+  "$PYTHON" "$(dirname "$0")/scripts/validate_preflight.py" \
     --echo "$OUTPUT_DIR/preflight_search_echo.json" \
     --prompt "$OUTPUT_DIR/preflight_search_prompt.json" \
     --resource "$OUTPUT_DIR/preflight_search_resource.json"
@@ -208,7 +213,7 @@ cat > "$OUTPUT_DIR/manifest.json" <<EOF
 EOF
 
 echo "==> Summarizing results"
-python3 "$(dirname "$0")/summarize_readme_benchmarks.py" \
+"$PYTHON" "$(dirname "$0")/scripts/summarize_readme_benchmarks.py" \
   --input-dir "$OUTPUT_DIR/raw" \
   --manifest "$OUTPUT_DIR/manifest.json" \
   --markdown-out "$OUTPUT_DIR/README_BENCHMARK_SNIPPET.md" \

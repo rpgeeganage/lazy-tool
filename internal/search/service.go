@@ -3,12 +3,12 @@ package search
 import (
 	"context"
 	"errors"
+	"math"
 	"sort"
 	"strings"
 
 	"lazy-tool/internal/embeddings"
 	"lazy-tool/internal/metrics"
-	"lazy-tool/internal/ranking"
 	"lazy-tool/internal/storage"
 	"lazy-tool/internal/vector"
 	"lazy-tool/pkg/models"
@@ -21,7 +21,6 @@ type Service struct {
 	Store       *storage.SQLiteStore
 	Vec         *vector.Index
 	Embed       embeddings.Embedder
-	Ranker      ranking.Ranker
 	Weights     ScoreWeights
 	LexicalOnly bool
 	// FullCatalogSubstring enables SQL substring matching on search_text when FTS did not already return rows (default true).
@@ -37,7 +36,6 @@ func NewService(store *storage.SQLiteStore, vec *vector.Index, emb embeddings.Em
 		Store:                store,
 		Vec:                  vec,
 		Embed:                emb,
-		Ranker:               ranking.Default{},
 		Weights:              MergeScoreWeights(weights),
 		LexicalOnly:          lexicalOnly,
 		FullCatalogSubstring: true,
@@ -111,6 +109,28 @@ func (s *Service) Search(ctx context.Context, q models.SearchQuery) (models.Rank
 		return models.RankedResults{}, err
 	}
 
+	// Load invocation stats for relevance feedback if boost is configured
+	if wt.InvocationBoost > 0 {
+		var names []string
+		for _, id := range candidateIDs {
+			if rec, ok := byID[id]; ok {
+				names = append(names, rec.CanonicalName)
+			}
+		}
+		if len(names) > 0 {
+			stats, err := s.Store.GetInvocationStats(ctx, names)
+			if err == nil && len(stats) > 0 {
+				q.InvocationStats = make(map[string]models.InvocationStat, len(stats))
+				for name, st := range stats {
+					q.InvocationStats[name] = models.InvocationStat{
+						InvokeCount:  st.InvokeCount,
+						SuccessCount: st.SuccessCount,
+					}
+				}
+			}
+		}
+	}
+
 	var results []models.SearchResult
 	for _, id := range candidateIDs {
 		rec, ok := byID[id]
@@ -120,93 +140,11 @@ func (s *Service) Search(ctx context.Context, q models.SearchQuery) (models.Rank
 		if !sourceAllowed(rec.SourceID, q.SourceIDs) {
 			continue
 		}
-		r := rec
-		var sc float64
-		var why []string
-		var bd map[string]float64
-		if q.ExplainScores {
-			bd = make(map[string]float64)
-		}
-		addBD := func(key string, delta float64) {
-			if bd == nil || delta == 0 {
-				return
-			}
-			bd[key] += delta
-		}
-		if needle != "" {
-			if r.CanonicalName == needle {
-				sc += wt.ExactCanonical
-				addBD("exact_canonical", wt.ExactCanonical)
-				why = append(why, "exact:canonical")
-			} else if strings.EqualFold(r.OriginalName, needle) {
-				sc += wt.ExactName
-				addBD("exact_name", wt.ExactName)
-				why = append(why, "exact:name")
-			} else if strings.Contains(r.SearchText, needle) {
-				sc += wt.Substring
-				addBD("substring", wt.Substring)
-				why = append(why, "text:substring")
-			}
-		}
-		ls, wLex := scoreLexical(needle, tokens, &r)
-		sc += ls
-		addBD("lexical", ls)
-		why = mergeWhyUnique(why, wLex)
-		if vecHits != nil {
-			if v, ok := vecHits[r.ID]; ok {
-				nv := normalizeCosine(v)
-				vecPts := nv * wt.VectorMultiplier
-				sc += vecPts
-				addBD("vector", vecPts)
-				why = append(why, "vector:similarity")
-			}
-		}
-		if u, wu := userSummaryWeight(wt, &r); u > 0 {
-			sc += u
-			addBD("user_summary", u)
-			why = mergeWhyUnique(why, wu)
-		}
-		if f, wf := favoriteWeight(wt, q, &r); f > 0 {
-			sc += f
-			addBD("favorite", f)
-			why = mergeWhyUnique(why, wf)
-		}
-		if sc <= 0 {
-			continue
-		}
-		sr := models.SearchResult{
-			Kind:          r.Kind,
-			ProxyToolName: r.CanonicalName,
-			SourceID:      r.SourceID,
-			Summary:       r.EffectiveSummary(),
-			Score:         sc,
-			WhyMatched:    why,
-			CapabilityID:  r.ID,
-		}
-		if len(bd) > 0 {
-			sr.ScoreBreakdown = bd
-		}
-		results = append(results, sr)
-	}
-	rawByCap := map[string]float64{}
-	if q.ExplainScores {
-		for _, r := range results {
-			rawByCap[r.CapabilityID] = r.Score
+		if sr, ok := scoreCandidate(&rec, needle, tokens, vecHits, wt, q); ok {
+			results = append(results, sr)
 		}
 	}
-	ranked, err := s.Ranker.Rank(ctx, q, results)
-	if err != nil {
-		return ranked, err
-	}
-	if q.ExplainScores && len(ranked.Results) > 0 {
-		scaleScoreBreakdownsAfterRank(ranked.Results, rawByCap)
-	}
-	ranked.CandidatePath = candidatePath
-	if q.GroupBySource && len(ranked.Results) > 0 {
-		ranked.Grouped = GroupResultsBySource(ranked.Results)
-	}
-	metrics.SearchExecuted(len(ranked.Results))
-	return ranked, nil
+	return s.rankAndFinalize(ctx, q, results, candidatePath)
 }
 
 func userSummaryWeight(wt ScoreWeights, r *models.CapabilityRecord) (float64, []string) {
@@ -224,6 +162,105 @@ func favoriteWeight(wt ScoreWeights, q models.SearchQuery, r *models.CapabilityR
 		return 0, nil
 	}
 	return wt.Favorite, []string{"user:favorite"}
+}
+
+// scoreCandidate computes score, why-matched signals, and optional breakdown for a single capability record.
+// Returns ok=false when the candidate should be dropped (score <= 0).
+func scoreCandidate(rec *models.CapabilityRecord, needle string, tokens []string, vecHits map[string]float32, wt ScoreWeights, q models.SearchQuery) (models.SearchResult, bool) {
+	var sc float64
+	var why []string
+	var bd map[string]float64
+	if q.ExplainScores {
+		bd = make(map[string]float64)
+	}
+	addBD := func(key string, delta float64) {
+		if bd == nil || delta == 0 {
+			return
+		}
+		bd[key] += delta
+	}
+	if needle != "" {
+		if rec.CanonicalName == needle {
+			sc += wt.ExactCanonical
+			addBD("exact_canonical", wt.ExactCanonical)
+			why = append(why, "exact:canonical")
+		} else if strings.EqualFold(rec.OriginalName, needle) {
+			sc += wt.ExactName
+			addBD("exact_name", wt.ExactName)
+			why = append(why, "exact:name")
+		} else if strings.Contains(rec.SearchText, needle) {
+			sc += wt.Substring
+			addBD("substring", wt.Substring)
+			why = append(why, "text:substring")
+		}
+	}
+	ls, wLex := scoreLexical(needle, tokens, rec)
+	sc += ls
+	addBD("lexical", ls)
+	why = mergeWhyUnique(why, wLex)
+	if vecHits != nil {
+		if v, ok := vecHits[rec.ID]; ok {
+			nv := normalizeCosine(v)
+			vecPts := nv * wt.VectorMultiplier
+			sc += vecPts
+			addBD("vector", vecPts)
+			why = append(why, "vector:similarity")
+		}
+	}
+	if u, wu := userSummaryWeight(wt, rec); u > 0 {
+		sc += u
+		addBD("user_summary", u)
+		why = mergeWhyUnique(why, wu)
+	}
+	if f, wf := favoriteWeight(wt, q, rec); f > 0 {
+		sc += f
+		addBD("favorite", f)
+		why = mergeWhyUnique(why, wf)
+	}
+	if wt.InvocationBoost > 0 && q.InvocationStats != nil {
+		if st, ok := q.InvocationStats[rec.CanonicalName]; ok && st.InvokeCount > 0 {
+			boost := math.Log2(1+float64(st.InvokeCount)) * wt.InvocationBoost
+			sc += boost
+			addBD("invocation", boost)
+			why = append(why, "history:invoked")
+		}
+	}
+	if sc <= 0 {
+		return models.SearchResult{}, false
+	}
+	sr := models.SearchResult{
+		Kind:          rec.Kind,
+		ProxyToolName: rec.CanonicalName,
+		SourceID:      rec.SourceID,
+		Summary:       rec.EffectiveSummary(),
+		Score:         sc,
+		WhyMatched:    why,
+		CapabilityID:  rec.ID,
+	}
+	if len(bd) > 0 {
+		sr.ScoreBreakdown = bd
+	}
+	return sr, true
+}
+
+// rankAndFinalize applies ranking, score normalization, explain-scores scaling, group-by-source, and metrics.
+func (s *Service) rankAndFinalize(_ context.Context, q models.SearchQuery, results []models.SearchResult, candidatePath string) (models.RankedResults, error) {
+	rawByCap := map[string]float64{}
+	if q.ExplainScores {
+		for _, r := range results {
+			rawByCap[r.CapabilityID] = r.Score
+		}
+	}
+	ranked := rankResults(q, results)
+	if q.ExplainScores && len(ranked.Results) > 0 {
+		scaleScoreBreakdownsAfterRank(ranked.Results, rawByCap)
+	}
+	ranked.CandidatePath = candidatePath
+	if q.GroupBySource && len(ranked.Results) > 0 {
+		ranked.Grouped = GroupResultsBySource(ranked.Results)
+	}
+	metrics.SearchExecuted(len(ranked.Results))
+	return ranked, nil
 }
 
 func (s *Service) searchEmptyQuery(ctx context.Context, q models.SearchQuery, tokens []string, vecHits map[string]float32, wt ScoreWeights) (models.RankedResults, error) {
@@ -258,83 +295,16 @@ func (s *Service) searchEmptyQuery(ctx context.Context, q models.SearchQuery, to
 			if !sourceAllowed(rec.SourceID, q.SourceIDs) {
 				continue
 			}
-			r := rec
-			var sc float64
-			var why []string
-			var bd map[string]float64
-			if q.ExplainScores {
-				bd = make(map[string]float64)
+			if sr, ok := scoreCandidate(&rec, "", tokens, vecHits, wt, q); ok {
+				results = append(results, sr)
 			}
-			addBD := func(key string, delta float64) {
-				if bd == nil || delta == 0 {
-					return
-				}
-				bd[key] += delta
-			}
-			ls, wLex := scoreLexical("", tokens, &r)
-			sc += ls
-			addBD("lexical", ls)
-			why = mergeWhyUnique(why, wLex)
-			if vecHits != nil {
-				if v, ok := vecHits[r.ID]; ok {
-					nv := normalizeCosine(v)
-					vecPts := nv * wt.VectorMultiplier
-					sc += vecPts
-					addBD("vector", vecPts)
-					why = append(why, "vector:similarity")
-				}
-			}
-			if u, wu := userSummaryWeight(wt, &r); u > 0 {
-				sc += u
-				addBD("user_summary", u)
-				why = mergeWhyUnique(why, wu)
-			}
-			if f, wf := favoriteWeight(wt, q, &r); f > 0 {
-				sc += f
-				addBD("favorite", f)
-				why = mergeWhyUnique(why, wf)
-			}
-			if sc <= 0 {
-				continue
-			}
-			sr := models.SearchResult{
-				Kind:          r.Kind,
-				ProxyToolName: r.CanonicalName,
-				SourceID:      r.SourceID,
-				Summary:       r.EffectiveSummary(),
-				Score:         sc,
-				WhyMatched:    why,
-				CapabilityID:  r.ID,
-			}
-			if len(bd) > 0 {
-				sr.ScoreBreakdown = bd
-			}
-			results = append(results, sr)
 		}
 	}
-	rawByCap := map[string]float64{}
-	if q.ExplainScores {
-		for _, r := range results {
-			rawByCap[r.CapabilityID] = r.Score
-		}
-	}
-	ranked, err := s.Ranker.Rank(ctx, q, results)
-	if err != nil {
-		return ranked, err
-	}
-	if q.ExplainScores && len(ranked.Results) > 0 {
-		scaleScoreBreakdownsAfterRank(ranked.Results, rawByCap)
-	}
+	candidatePath := models.SearchCandidatePathEmptyQueryFullCatalog
 	if truncated {
-		ranked.CandidatePath = models.SearchCandidatePathEmptyQueryTruncated
-	} else {
-		ranked.CandidatePath = models.SearchCandidatePathEmptyQueryFullCatalog
+		candidatePath = models.SearchCandidatePathEmptyQueryTruncated
 	}
-	if q.GroupBySource && len(ranked.Results) > 0 {
-		ranked.Grouped = GroupResultsBySource(ranked.Results)
-	}
-	metrics.SearchExecuted(len(ranked.Results))
-	return ranked, nil
+	return s.rankAndFinalize(ctx, q, results, candidatePath)
 }
 
 func (s *Service) buildCandidates(ctx context.Context, q models.SearchQuery, needle string, vecHits map[string]float32) ([]string, string, error) {

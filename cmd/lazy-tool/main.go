@@ -29,6 +29,8 @@ func main() {
 	root.AddCommand(newTUICmd())
 	root.AddCommand(newCatalogCmd())
 	root.AddCommand(newPinCmd())
+	root.AddCommand(newImportCmd())
+	root.AddCommand(newCacheClearCmd())
 
 	if err := root.Execute(); err != nil {
 		os.Exit(1)

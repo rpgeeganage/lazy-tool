@@ -88,6 +88,18 @@ func (r *SourceRegistry) Filter(sourceIDs []string) []models.Source {
 	return out
 }
 
+// SourcesWithFallback returns enabled sources that have the given fallback mode.
+func (r *SourceRegistry) SourcesWithFallback(mode string) []models.Source {
+	var out []models.Source
+	for _, id := range r.order {
+		s := r.byID[id]
+		if !s.Disabled && s.Fallback == mode {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
 // IDs returns enabled source ids in config order.
 func (r *SourceRegistry) IDs() []string {
 	var out []string

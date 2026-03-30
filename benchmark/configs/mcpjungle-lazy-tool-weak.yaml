@@ -1,0 +1,30 @@
+# lazy-tool → MCPJungle (local): weak-model benchmark config.
+#
+# Separate DB paths to avoid collisions with the strong-model suite.
+#
+# Prerequisites:
+#   1. MCPJungle running (e.g. docker compose per https://github.com/mcpjungle/MCPJungle )
+#   2. Sample MCPs registered via `mcpjungle register` (see benchmark/mcpjungle-dev/)
+#
+#   export LAZY_TOOL_CONFIG=$PWD/benchmark/configs/mcpjungle-lazy-tool-weak.yaml
+#   ./bin/lazy-tool reindex && ./bin/lazy-tool search "echo" --limit 10
+
+app:
+  name: lazy-tool-weak-model-bench
+  environment: development
+
+storage:
+  sqlite_path: /tmp/mcpjungle-weak.db
+  vector_path: /tmp/mcpjungle-weak-vector
+
+summary:
+  enabled: false
+
+embeddings:
+  provider: noop
+
+sources:
+  - id: mcpjungle
+    type: gateway
+    transport: http
+    url: http://127.0.0.1:8080/mcp
