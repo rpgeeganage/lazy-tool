@@ -31,8 +31,13 @@ if [[ ! -f "$PYTHON" ]]; then
   return 1 2>/dev/null || exit 1
 fi
 
+_py_bench_deps_ok() {
+  # pydantic_core ships a native module; metadata can exist without the .so (broken/wrong arch).
+  "$PYTHON" -c "import pydantic_core._pydantic_core; import pydantic_ai" 2>/dev/null
+}
+
 # Check if deps are already installed (fast path)
-if "$PYTHON" -c "import pydantic_ai" 2>/dev/null; then
+if _py_bench_deps_ok; then
   return 0 2>/dev/null || true
 fi
 
@@ -46,10 +51,20 @@ else
   "$PYTHON" -m pip install --quiet -r "$_REQ_FILE"
 fi
 
-# Verify
-if ! "$PYTHON" -c "import pydantic_ai" 2>/dev/null; then
+# uv/pip may "audit" satisfied metadata without restoring missing wheels; force reinstall once.
+if ! _py_bench_deps_ok; then
+  echo "  deps still broken or incomplete; retrying with forced reinstall..."
+  if command -v uv &>/dev/null; then
+    uv pip install --python "$PYTHON" --reinstall -r "$_REQ_FILE"
+  else
+    "$PYTHON" -m pip install --force-reinstall --no-cache-dir -r "$_REQ_FILE"
+  fi
+fi
+
+if ! _py_bench_deps_ok; then
   echo "ERROR: pydantic_ai still not importable after install." >&2
   echo "Check $_REQ_FILE and your Python environment." >&2
+  echo "Hint: rm -rf $_VENV_DIR and retry." >&2
   return 1 2>/dev/null || exit 1
 fi
 
