@@ -1,0 +1,10 @@
+{
+  "timestamp": "2026-03-30T21:46:58Z",
+  "repeat": 3,
+  "models_tested": "qwen2.5:3b",
+  "ollama_version": "0.19.0",
+  "lazy_tool_version": "lazy-tool dev (none)",
+  "jungle_url": "http://127.0.0.1:8080/mcp",
+  "lazy_config": "/Users/ruwan/dev/agents/lazy-tool/benchmark/configs/mcpjungle-lazy-tool-weak.yaml",
+  "tiers": "1,2,3"
+}
