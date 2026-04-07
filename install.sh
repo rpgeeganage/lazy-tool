@@ -4,7 +4,7 @@ set -eu
 # lazy-tool installer
 # Usage:
 #   curl -sSfL https://raw.githubusercontent.com/rpgeeganage/lazy-tool/main/install.sh | sh
-#   INSTALL_DIR=/usr/local/bin curl -sSfL ... | sh
+#   curl -sSfL ... | INSTALL_DIR=/usr/local/bin sh
 
 REPO="rpgeeganage/lazy-tool"
 INSTALL_DIR="${INSTALL_DIR:-./bin}"

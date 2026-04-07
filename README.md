@@ -51,7 +51,7 @@ curl -sSfL https://raw.githubusercontent.com/rpgeeganage/lazy-tool/main/install.
 Override the install directory (default `./bin`):
 
 ```bash
-INSTALL_DIR=/usr/local/bin curl -sSfL https://raw.githubusercontent.com/rpgeeganage/lazy-tool/main/install.sh | sh
+curl -sSfL https://raw.githubusercontent.com/rpgeeganage/lazy-tool/main/install.sh | INSTALL_DIR=/usr/local/bin sh
 ```
 
 ### Go install
