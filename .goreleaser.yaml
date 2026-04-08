@@ -1,6 +1,6 @@
 builds:
   - main: ./cmd/lazy-tool
-    binary: lazy-tool
+    binary: lazy-tool-x
     env:
       - CGO_ENABLED=0
     goos:
