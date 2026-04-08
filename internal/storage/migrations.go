@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS capabilities (
 	tags_json TEXT,
 	embedding_model TEXT,
 	embedding_vector BLOB,
+	embedding_text_hash TEXT NOT NULL DEFAULT '',
 	version_hash TEXT NOT NULL,
 	last_seen_at INTEGER NOT NULL,
 	user_summary TEXT NOT NULL DEFAULT ''

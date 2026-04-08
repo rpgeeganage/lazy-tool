@@ -247,7 +247,7 @@ func (s *SQLiteStore) GetCapabilitiesByIDs(ctx context.Context, ids []string) (m
 	ph := placeholders(len(ids))
 	q := `SELECT id, kind, source_id, source_type, canonical_name, original_name, original_description,
 	generated_summary, user_summary, search_text, input_schema_json, metadata_json, tags_json,
-	embedding_model, embedding_vector, version_hash, last_seen_at
+	embedding_model, embedding_vector, embedding_text_hash, version_hash, last_seen_at
 FROM capabilities WHERE id IN (` + ph + `)`
 	args := anySlice(ids)
 	rows, err := s.db.QueryContext(ctx, q, args...)
@@ -265,7 +265,7 @@ FROM capabilities WHERE id IN (` + ph + `)`
 			&rec.ID, &rec.Kind, &rec.SourceID, &rec.SourceType, &rec.CanonicalName,
 			&rec.OriginalName, &rec.OriginalDescription, &rec.GeneratedSummary, &rec.UserSummary, &rec.SearchText,
 			&rec.InputSchemaJSON, &rec.MetadataJSON, &tagsJSON, &rec.EmbeddingModel, &emb,
-			&rec.VersionHash, &last,
+			&rec.EmbeddingTextHash, &rec.VersionHash, &last,
 		); err != nil {
 			return nil, err
 		}
