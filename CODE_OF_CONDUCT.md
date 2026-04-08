@@ -9,7 +9,7 @@
 
 ## Our standard
 
-We want `lazy-tool` to be a technically sharp, respectful open source project.
+We want `lazy-tool-x` to be a technically sharp, respectful open source project.
 
 Participants are expected to contribute in ways that improve the project, the documentation, and the discussion quality around it.
 

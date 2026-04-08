@@ -13,7 +13,7 @@ func newVersionCmd() *cobra.Command {
 		Use:   "version",
 		Short: "Print version information",
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Printf("lazy-tool %s (%s)\n", version.Version, version.Commit)
+			fmt.Printf("lazy-tool-x %s (%s)\n", version.Version, version.Commit)
 		},
 	}
 }

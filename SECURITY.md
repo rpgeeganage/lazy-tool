@@ -41,7 +41,7 @@ A good-faith report should receive:
 
 ## Scope notes
 
-`lazy-tool` is intentionally local-first and local-only.
+`lazy-tool-x` is intentionally local-first and local-only.
 
 That means many risks are about:
 - executing configured local stdio commands

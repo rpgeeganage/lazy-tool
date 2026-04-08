@@ -21,8 +21,8 @@ func newHealthCmd() *cobra.Command {
 		Short: "Verify config loads and report basic status",
 		Long: `Verify config loads and report basic status.
 
-With --probe, lazy-tool creates a dedicated connectors.Factory (and MCP sessions) for each configured source.
-That factory is separate from lazy-tool serve or reindex: probing does not attach to the server's upstream sessions.`,
+With --probe, lazy-tool-x creates a dedicated connectors.Factory (and MCP sessions) for each configured source.
+That factory is separate from lazy-tool-x serve or reindex: probing does not attach to the server's upstream sessions.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			log := slog.Default()
 			path := resolveConfigPath()
@@ -36,7 +36,7 @@ That factory is separate from lazy-tool serve or reindex: probing does not attac
 			a := app.New(cfg, log)
 			name := cfg.App.Name
 			if name == "" {
-				name = "lazy-tool"
+				name = "lazy-tool-x"
 			}
 			srcs, err := config.NormalizeSources(cfg.Sources)
 			if err != nil {

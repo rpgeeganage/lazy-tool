@@ -13,12 +13,12 @@
 
 ## What this doc covers
 
-This page explains how to point `lazy-tool` at MCP servers or gateways you already run locally.
+This page explains how to point `lazy-tool-x` at MCP servers or gateways you already run locally.
 
 You do **not** need to replace your current setup.
 
 You only need to:
-- add `lazy-tool` as its own local process
+- add `lazy-tool-x` as its own local process
 - declare where your existing MCP sources live under `sources:`
 - reindex the catalog
 
@@ -26,20 +26,20 @@ You only need to:
 
 ```mermaid
 flowchart TD
-    A[Your local MCP servers / gateways] --> B[lazy-tool]
+    A[Your local MCP servers / gateways] --> B[lazy-tool-x]
     B --> C[Local catalog]
     B --> D[Small MCP surface]
     D --> E[Agent / IDE / Host]
 ```
 
-`lazy-tool` does not auto-discover random processes on your machine.
+`lazy-tool-x` does not auto-discover random processes on your machine.
 
 Instead, you declare local sources explicitly:
 
 - HTTP MCP endpoint → `transport: http`
 - stdio MCP server → `transport: stdio`
 
-`lazy-tool` then:
+`lazy-tool-x` then:
 - connects for indexing
 - stores a local capability catalog
 - proxies the real upstream call only after capability selection
@@ -59,12 +59,12 @@ If the endpoint is:
 
 ### Stdio sources
 
-Stdio sources are executed by `lazy-tool` as child processes.
+Stdio sources are executed by `lazy-tool-x` as child processes.
 
 Important details:
 - use `command` and `args`
 - use `cwd` if the process expects a specific working directory
-- the child process inherits `lazy-tool`'s environment
+- the child process inherits `lazy-tool-x`'s environment
 - use wrapper scripts if your setup needs custom env shaping
 
 ## Pattern A: local HTTP MCP
@@ -118,16 +118,16 @@ Always reindex after changing `sources:`.
 
 ```bash
 export LAZY_TOOL_CONFIG=$PWD/configs/example.yaml
-./bin/lazy-tool reindex
-./bin/lazy-tool sources --status
+./bin/lazy-tool-x reindex
+./bin/lazy-tool-x sources --status
 ```
 
 Then validate with:
 
 ```bash
-./bin/lazy-tool search "echo" --limit 10
-./bin/lazy-tool search "prompt" --limit 10
-./bin/lazy-tool search "resource" --limit 10
+./bin/lazy-tool-x search "echo" --limit 10
+./bin/lazy-tool-x search "prompt" --limit 10
+./bin/lazy-tool-x search "resource" --limit 10
 ```
 
 ## Troubleshooting
@@ -138,7 +138,7 @@ Check:
 - source URL correctness
 - MCP wire compatibility
 - `cwd` correctness for stdio
-- whether the process runs successfully outside `lazy-tool`
+- whether the process runs successfully outside `lazy-tool-x`
 
 ### search returns zero hits
 

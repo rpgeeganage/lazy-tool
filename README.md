@@ -1,8 +1,8 @@
-# lazy-tool
+# lazy-tool-x
 
 The more MCP servers you connect, the more tool schemas get dumped into every prompt. The model reads all of them, picks the wrong one more often, and you pay for every token. This is a [known problem](https://arxiv.org/abs/2505.03275) — the pattern that solves it (search before invoke) is well-established.
 
-Most implementations of that pattern require a Python stack, a vector database, Docker, or a cloud service. `lazy-tool` does it as a single Go binary with a local SQLite catalog. No containers, no API keys for the tool layer, no infrastructure.
+Most implementations of that pattern require a Python stack, a vector database, Docker, or a cloud service. `lazy-tool-x` does it as a single Go binary with a local SQLite catalog. No containers, no API keys for the tool layer, no infrastructure.
 
 ```
 make build → import --write → reindex → serve
@@ -10,7 +10,7 @@ make build → import --write → reindex → serve
 
 That's it. One binary, reads your existing IDE config, indexes everything locally, serves as an MCP endpoint.
 
-| | Direct MCP | Through lazy-tool |
+| | Direct MCP | Through lazy-tool-x |
 |---|---:|---:|
 | Input tokens per turn | 1,701 | 915 **(−46%)** |
 | Latency per turn | 0.232s | 0.158s **(−32%)** |
@@ -18,7 +18,7 @@ That's it. One binary, reads your existing IDE config, indexes everything locall
 
 <sup>llama-3.1-8b-instant, 20 repeats per task. <a href="benchmark/README.md">Methodology</a></sup>
 
-[![CI](https://github.com/rpgeeganage/lazy-tool/actions/workflows/ci.yml/badge.svg)](https://github.com/rpgeeganage/lazy-tool/actions/workflows/ci.yml)
+[![CI](https://github.com/cjnova/lazy-tool-x/actions/workflows/ci.yml/badge.svg)](https://github.com/cjnova/lazy-tool-x/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Go](https://img.shields.io/badge/Go-1.25+-00ADD8.svg)](https://go.dev)
 
@@ -28,7 +28,7 @@ That's it. One binary, reads your existing IDE config, indexes everything locall
 
 Several projects address MCP tool sprawl in different ways: [RAG-MCP](https://github.com/fintools-ai/rag-mcp) (Python + vector DB), [MetaMCP](https://github.com/metatool-ai/metamcp) (Docker), [AWS AgentCore Gateway](https://aws.amazon.com/blogs/machine-learning/transform-your-mcp-architecture-unite-mcp-servers-through-agentcore-gateway/) (managed cloud), and Claude Code's [built-in tool search](https://modelcontextprotocol.io/specification/2025-06-18/server/tools) (client-side, Claude-only).
 
-`lazy-tool` occupies a specific niche: local-first, zero-dependency, single binary.
+`lazy-tool-x` occupies a specific niche: local-first, zero-dependency, single binary.
 
 - **No infrastructure.** One Go binary, local SQLite. No Docker, no vector DB service, no cloud account.
 - **IDE auto-import.** Reads your Claude Desktop, Cursor, or VS Code MCP config. No manual YAML unless you want it.
@@ -36,7 +36,7 @@ Several projects address MCP tool sprawl in different ways: [RAG-MCP](https://gi
 - **Provider-agnostic.** Not tied to Anthropic, OpenAI, or any specific client. Anything that speaks MCP over stdio or HTTP.
 - **Reliability built in.** Circuit breaking, caching, session reuse, and tracing handled at the proxy layer.
 
-If you're already inside Claude Code and only use Claude, the built-in tool search may cover your needs. If you want something that works across providers, runs locally without dependencies, and aggregates multiple MCP servers — that's the space `lazy-tool` is in.
+If you're already inside Claude Code and only use Claude, the built-in tool search may cover your needs. If you want something that works across providers, runs locally without dependencies, and aggregates multiple MCP servers — that's the space `lazy-tool-x` is in.
 
 ---
 
@@ -45,19 +45,19 @@ If you're already inside Claude Code and only use Claude, the built-in tool sear
 ### Quick install (pre-built binary)
 
 ```bash
-curl -sSfL https://raw.githubusercontent.com/rpgeeganage/lazy-tool/main/install.sh | sh
+curl -sSfL https://raw.githubusercontent.com/cjnova/lazy-tool-x/main/install.sh | sh
 ```
 
 Override the install directory (default `./bin`):
 
 ```bash
-curl -sSfL https://raw.githubusercontent.com/rpgeeganage/lazy-tool/main/install.sh | INSTALL_DIR=/usr/local/bin sh
+curl -sSfL https://raw.githubusercontent.com/cjnova/lazy-tool-x/main/install.sh | INSTALL_DIR=/usr/local/bin sh
 ```
 
 ### Go install
 
 ```bash
-go install github.com/rpgeeganage/lazy-tool/cmd/lazy-tool@latest
+go install github.com/cjnova/lazy-tool-x/cmd/lazy-tool@latest
 ```
 
 ### Build from source
@@ -65,7 +65,7 @@ go install github.com/rpgeeganage/lazy-tool/cmd/lazy-tool@latest
 Requires Go 1.25+.
 
 ```bash
-make build            # development build → bin/lazy-tool
+make build            # development build → bin/lazy-tool-x
 make build-release    # optimized, stripped, version-stamped
 ```
 
@@ -76,12 +76,12 @@ make build-release    # optimized, stripped, version-stamped
 If you already have MCP servers in Claude Desktop, Cursor, or VS Code:
 
 ```bash
-./lazy-tool import --write   # reads your IDE config, generates lazy-tool config
-./lazy-tool reindex          # indexes every tool, prompt, and resource
-./lazy-tool serve            # agent connects here instead of directly to MCP servers
+./lazy-tool-x import --write   # reads your IDE config, generates lazy-tool-x config
+./lazy-tool-x reindex          # indexes every tool, prompt, and resource
+./lazy-tool-x serve            # agent connects here instead of directly to MCP servers
 ```
 
-Point your agent at `lazy-tool serve`. It searches for tools instead of receiving them all in context.
+Point your agent at `lazy-tool-x serve`. It searches for tools instead of receiving them all in context.
 
 No IDE config? Write a YAML file manually — see [Configuration](#configuration).
 
@@ -89,16 +89,16 @@ No IDE config? Write a YAML file manually — see [Configuration](#configuration
 
 ## When to use which mode
 
-- **Direct mode** — every cataloged tool is exposed by name. The agent sees real schemas, lazy-tool routes transparently. Best for smaller/cheaper models (Haiku, GPT-4.1-mini, local Ollama) that struggle with multi-step reasoning. They get a simple tool list and call tools directly — one step, no search overhead. Also good for strong models that benefit from single-endpoint aggregation, circuit breaking, and caching.
+- **Direct mode** — every cataloged tool is exposed by name. The agent sees real schemas, lazy-tool-x routes transparently. Best for smaller/cheaper models (Haiku, GPT-4.1-mini, local Ollama) that struggle with multi-step reasoning. They get a simple tool list and call tools directly — one step, no search overhead. Also good for strong models that benefit from single-endpoint aggregation, circuit breaking, and caching.
 
 - **Search mode** (default) — the agent sees 5 meta-tools and discovers capabilities through search. Best for strong models (Claude, GPT-4, Llama 70B+) working with large tool catalogs (50+ tools) where dumping every schema into context wastes tokens and degrades selection accuracy. Requires the model to handle a two-step search→invoke pattern.
 
 - **Hybrid mode** — both search and direct tools available. Useful for gradual migration or mixed workloads.
 
 ```bash
-lazy-tool serve                  # search (default)
-lazy-tool serve --mode direct    # direct
-lazy-tool serve --mode hybrid    # both
+lazy-tool-x serve                  # search (default)
+lazy-tool-x serve --mode direct    # direct
+lazy-tool-x serve --mode hybrid    # both
 ```
 
 ---
@@ -107,10 +107,10 @@ lazy-tool serve --mode hybrid    # both
 
 ```
 1. You configure MCP sources (or auto-import from your IDE)
-2. lazy-tool reindex fetches every tool, prompt, and resource
+2. lazy-tool-x reindex fetches every tool, prompt, and resource
 3. The catalog is stored locally in SQLite with full-text search
-4. Agents connect to lazy-tool via stdio or HTTP
-5. The agent searches → finds → invokes — lazy-tool proxies to the real upstream
+4. Agents connect to lazy-tool-x via stdio or HTTP
+5. The agent searches → finds → invokes — lazy-tool-x proxies to the real upstream
 ```
 
 ```mermaid
@@ -152,7 +152,8 @@ The agent sees 5 tools regardless of how many exist upstream:
 - [Detailed setup](#detailed-setup)
 - [Auto-import from IDE configs](#auto-import-from-ide-configs)
 - [CLI reference](#cli-reference)
-- [Configuration](#configuration)
+  - [Configuration](#configuration)
+  - [Summary refinement](#summary-refinement)
 - [Search algorithm](#search-algorithm)
 - [Reliability features](#reliability-features)
 - [Response cache](#response-cache)
@@ -177,7 +178,7 @@ The agent sees 5 tools regardless of how many exist upstream:
 
 ```bash
 make build
-# or: go build -o bin/lazy-tool ./cmd/lazy-tool
+# or: go build -o bin/lazy-tool-x ./cmd/lazy-tool
 ```
 
 ### 2. Configure
@@ -186,7 +187,7 @@ make build
 
 ```bash
 # Discovers MCP servers from Claude Desktop, Cursor, and VS Code
-./bin/lazy-tool import --write
+./bin/lazy-tool-x import --write
 export LAZY_TOOL_CONFIG=~/.lazy-tool/config.yaml
 ```
 
@@ -224,57 +225,68 @@ sources:
 ### 3. Index the catalog
 
 ```bash
-./bin/lazy-tool reindex
-./bin/lazy-tool sources --status
+./bin/lazy-tool-x reindex
+./bin/lazy-tool-x sources --status
 ```
 
 ### 4. Search
 
 ```bash
-./bin/lazy-tool search "echo" --limit 5
-./bin/lazy-tool search "file management" --explain-scores
+./bin/lazy-tool-x search "echo" --limit 5
+./bin/lazy-tool-x search "file management" --explain-scores
 ```
 
 ### 5. Serve as MCP
 
 ```bash
 # Search mode (default): 5 meta-tools, search-first workflow
-./bin/lazy-tool serve
+./bin/lazy-tool-x serve
 
 # Direct mode: all cataloged tools exposed as first-class MCP tools
-./bin/lazy-tool serve --mode direct
+./bin/lazy-tool-x serve --mode direct
 
 # HTTP transport: serve over HTTP instead of stdio
-./bin/lazy-tool serve --mode direct --transport http --addr :8080
+./bin/lazy-tool-x serve --mode direct --transport http --addr :8080
 ```
 
-Point your agent or IDE at `lazy-tool serve` as an MCP server. In HTTP mode, connect Claude Desktop to `http://localhost:8080/mcp`.
+Point your agent or IDE at `lazy-tool-x serve` as an MCP server. In HTTP mode, connect Claude Desktop to `http://localhost:8080/mcp`.
 
 ### 6. Optional UIs
 
 ```bash
-./bin/lazy-tool web --addr 127.0.0.1:8765   # browser UI
-./bin/lazy-tool tui                           # terminal UI
+./bin/lazy-tool-x web --addr 127.0.0.1:8765   # browser UI
+./bin/lazy-tool-x tui                           # terminal UI
 ```
+
+## Summary refinement
+
+When you add new MCP sources, the best retrieval quality usually comes from:
+
+1. generate summaries
+2. benchmark representative queries
+3. hand-tune only the overlapping tools
+4. store exact overrides for those tools
+
+See `docs/summary-refinement.md` for the workflow.
 
 ---
 
 ## Auto-import from IDE configs
 
-`lazy-tool` can automatically discover MCP server configurations from Claude Desktop, Cursor, and VS Code — no manual YAML writing needed.
+`lazy-tool-x` can automatically discover MCP server configurations from Claude Desktop, Cursor, and VS Code — no manual YAML writing needed.
 
 ```bash
 # Preview what would be imported (prints YAML to stdout)
-lazy-tool import
+lazy-tool-x import
 
 # Import from a specific IDE
-lazy-tool import --from claude
-lazy-tool import --from cursor
-lazy-tool import --from vscode
+lazy-tool-x import --from claude
+lazy-tool-x import --from cursor
+lazy-tool-x import --from vscode
 
 # Write config directly
-lazy-tool import --write
-lazy-tool import --write --output my-config.yaml
+lazy-tool-x import --write
+lazy-tool-x import --write --output my-config.yaml
 ```
 
 Supported config file locations:
@@ -425,7 +437,7 @@ cache:
 
 ## Search algorithm
 
-`lazy-tool` uses **hybrid retrieval** combining lexical and optional vector search.
+`lazy-tool-x` uses **hybrid retrieval** combining lexical and optional vector search.
 
 ```
 query("echo")
@@ -466,10 +478,10 @@ Sources with `fallback: passthrough` return their full catalog when search retur
 
 ## Response cache
 
-When enabled, `lazy-tool` caches upstream responses in memory (LRU + TTL). Keyed by SHA-256 of tool name + input arguments. Per-source exclusion for mutation-heavy tools. Cache hits visible in trace logs and web UI.
+When enabled, `lazy-tool-x` caches upstream responses in memory (LRU + TTL). Keyed by SHA-256 of tool name + input arguments. Per-source exclusion for mutation-heavy tools. Cache hits visible in trace logs and web UI.
 
 ```bash
-lazy-tool cache-clear
+lazy-tool-x cache-clear
 ```
 
 ---
@@ -477,8 +489,8 @@ lazy-tool cache-clear
 ## Web UI and TUI
 
 ```bash
-./bin/lazy-tool web --addr 127.0.0.1:8765   # browser UI: search, inspect, traces
-./bin/lazy-tool tui                           # terminal UI: bubbletea-based
+./bin/lazy-tool-x web --addr 127.0.0.1:8765   # browser UI: search, inspect, traces
+./bin/lazy-tool-x tui                           # terminal UI: bubbletea-based
 ```
 
 ---
@@ -490,7 +502,7 @@ lazy-tool cache-clear
 ```mermaid
 xychart-beta
     title "No-tool baseline: average input tokens"
-    x-axis ["Direct MCP", "lazy-tool"]
+    x-axis ["Direct MCP", "lazy-tool-x"]
     y-axis "Tokens" 0 --> 1800
     bar [1701, 915]
 ```
@@ -498,7 +510,7 @@ xychart-beta
 ```mermaid
 xychart-beta
     title "No-tool baseline: average latency (seconds)"
-    x-axis ["Direct MCP", "lazy-tool"]
+    x-axis ["Direct MCP", "lazy-tool-x"]
     y-axis "Seconds" 0 --> 0.3
     bar [0.232, 0.158]
 ```
@@ -548,7 +560,7 @@ Full methodology: [benchmark/README.md](benchmark/README.md)
 | Document | Contents |
 |---|---|
 | **This file** | Value prop, quick start, reference |
-| [docs/plugging-existing-mcps.md](docs/plugging-existing-mcps.md) | Connect `lazy-tool` to your existing MCP servers |
+| [docs/plugging-existing-mcps.md](docs/plugging-existing-mcps.md) | Connect `lazy-tool-x` to your existing MCP servers |
 | [benchmark/README.md](benchmark/README.md) | Full benchmark methodology and reproducibility |
 | [docs/benchmark-charts.html](docs/benchmark-charts.html) | Interactive Chart.js visualizations |
 | [configs/example.yaml](configs/example.yaml) | Annotated reference config |

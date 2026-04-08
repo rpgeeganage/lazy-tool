@@ -385,7 +385,7 @@ func loadCapabilities(stack *runtime.Stack) (string, error) {
 
 func (m Model) View() string {
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("lazy-tool"))
+	b.WriteString(titleStyle.Render("lazy-tool-x"))
 	b.WriteString("\n")
 	b.WriteString(helpStyle.Render(viewTitle(m.view)))
 	b.WriteString("\n\n")

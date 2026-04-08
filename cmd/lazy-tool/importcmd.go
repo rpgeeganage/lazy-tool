@@ -19,7 +19,7 @@ func newImportCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "import",
 		Short: "Import MCP server configs from Claude Desktop, Cursor, or VS Code",
-		Long:  "Discovers MCP server configurations from IDE config files and generates a lazy-tool YAML config.",
+		Long:  "Discovers MCP server configurations from IDE config files and generates a lazy-tool-x YAML config.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var hosts []config.IDEHost
 			if from != "" {

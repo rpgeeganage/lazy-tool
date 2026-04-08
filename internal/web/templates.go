@@ -7,7 +7,7 @@ import "html/template"
 const uiTemplates = `
 {{define "nav"}}
 <header class="site-header">
-  <a href="/" class="brand">lazy-tool</a>
+  <a href="/" class="brand">lazy-tool-x</a>
   <nav class="nav-links" aria-label="Main">
     <a href="/search">Search</a>
     <a href="/inspect">Inspect</a>
@@ -224,13 +224,13 @@ code { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>lazy-tool</title>
+  <title>lazy-tool-x</title>
   {{template "styles"}}
 </head>
 <body>
 {{template "nav" .}}
 <main class="wrap">
-  <h1>lazy-tool</h1>
+  <h1>lazy-tool-x</h1>
   <p>Local MCP discovery proxy. JSON routes open raw data; Search and Inspect are HTML forms.</p>
   <ul class="route-list">
     <li><a href="/search">/search</a><span class="hint">hybrid search</span></li>
@@ -253,7 +253,7 @@ code { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Search — lazy-tool</title>
+  <title>Search — lazy-tool-x</title>
   {{template "styles"}}
 </head>
 <body>
@@ -315,7 +315,7 @@ code { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Reindex — lazy-tool</title>
+  <title>Reindex — lazy-tool-x</title>
   {{template "styles"}}
 </head>
 <body>
@@ -342,7 +342,7 @@ code { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Inspect — lazy-tool</title>
+  <title>Inspect — lazy-tool-x</title>
   {{template "styles"}}
 </head>
 <body>
