@@ -22,12 +22,23 @@ If both summaries emphasize the same domains too heavily, ranking quality drops 
 
 ## Local helper files
 
-These files were used to tune the Microsoft Learn catalog and can be reused when more MCP sources are added:
+These files can be reused when more MCP sources are added:
 
-- `summarize-catalog-x.sh`
-- `summarize-catalog-x.overrides.json`
+- `scripts/summarize-catalog.sh`
+- `scripts/summarize-catalog.overrides.json`
+- `.opencode/skills/catalog-summary-refinement/SKILL.md`
+- `.opencode/commands/refine-catalog-summaries.md`
 
 The overrides file is intentionally small. It should only contain hand-tuned summaries for tools where the generic summarizer blurs intent.
+
+## Local opencode use
+
+This repo now includes a local `.opencode` skill and command:
+
+- skill: `catalog-summary-refinement`
+- command: `/refine-catalog-summaries`
+
+That makes the workflow directly reusable from an opencode-enabled checkout of this repository.
 
 ## Summary style guide
 
