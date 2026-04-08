@@ -269,6 +269,13 @@ When you add new MCP sources, the best retrieval quality usually comes from:
 
 See `docs/summary-refinement.md` for the workflow.
 
+Local repo assets:
+
+- `scripts/summarize-catalog.sh`
+- `scripts/summarize-catalog.overrides.json`
+- `.opencode/skills/catalog-summary-refinement/SKILL.md`
+- `.opencode/commands/refine-catalog-summaries.md`
+
 ---
 
 ## Auto-import from IDE configs

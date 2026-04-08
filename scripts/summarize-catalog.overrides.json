@@ -1,0 +1,4 @@
+{
+  "microsoft-learn__microsoft_docs_search": "Searches Microsoft Learn by topic, product, or question and returns relevant guidance articles, reference pages, titles, URLs, and excerpts before any full-page retrieval. [keywords: Entra ID, Power Platform, Intune, AKS, Bicep, .NET, ASP.NET Core, Semantic Kernel, Azure Functions, Microsoft Graph, Fabric, Purview, Defender for Cloud, Key Vault, Copilot Studio, query, search, discovery, lookup, reference, guidance, article]",
+  "microsoft-learn__microsoft_docs_fetch": "Fetches one specific Microsoft Learn page by URL and converts the full article to markdown after search has already identified the page. [keywords: url, page retrieval, full article, markdown conversion, read page, fetch url, detailed content, full content, page body, complete page]"
+}
