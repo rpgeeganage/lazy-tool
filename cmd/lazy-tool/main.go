@@ -13,7 +13,7 @@ func main() {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})))
 
 	root := &cobra.Command{
-		Use:   "lazy-tool",
+		Use:   "lazy-tool-x",
 		Short: "Local-first MCP discovery proxy for token-efficient tool search",
 	}
 	root.PersistentFlags().StringVar(&configPath, "config", "", "path to YAML config (or set LAZY_TOOL_CONFIG)")
