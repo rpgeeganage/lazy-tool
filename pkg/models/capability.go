@@ -31,6 +31,7 @@ type CapabilityRecord struct {
 	Tags                []string
 	EmbeddingModel      string
 	EmbeddingVector     []float32
+	EmbeddingTextHash   string
 	VersionHash         string
 	LastSeenAt          time.Time
 }

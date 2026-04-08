@@ -1,6 +1,8 @@
 package catalog
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"strings"
 	"time"
@@ -83,6 +85,9 @@ func NormalizeTool(src models.Source, meta connectors.ToolMeta, now time.Time) m
 	return rec
 }
 
+// RefreshSearchText rebuilds the FTS-indexed search_text from structured fields.
+// Excludes raw JSON schema and metadata to reduce lexical noise; parameter names
+// are already captured in Tags.
 func RefreshSearchText(rec *models.CapabilityRecord) {
 	parts := []string{
 		rec.SourceID,
@@ -93,11 +98,83 @@ func RefreshSearchText(rec *models.CapabilityRecord) {
 		rec.OriginalDescription,
 		rec.GeneratedSummary,
 		rec.UserSummary,
-		rec.InputSchemaJSON,
 		strings.Join(rec.Tags, " "),
-		rec.MetadataJSON,
 	}
 	rec.SearchText = strings.ToLower(strings.Join(parts, " "))
+}
+
+// BuildEmbeddingText produces a clean, semantic-friendly string for vector embeddings.
+// The format is designed to maximise cosine-similarity relevance:
+//
+//	"{Kind} {OriginalName}: {summary sentence}. Parameters: {tags}. Keywords: {kw}"
+//
+// When no summary is available, falls back to the original description.
+// If the effective summary contains a "[keywords: ...]" suffix, those keywords are
+// extracted and appended separately.
+func BuildEmbeddingText(rec *models.CapabilityRecord) string {
+	summary, keywords := splitSummaryKeywords(rec.EffectiveSummary())
+	if summary == "" {
+		summary = rec.OriginalDescription
+	}
+
+	var b strings.Builder
+	b.WriteString(string(rec.Kind))
+	b.WriteByte(' ')
+	b.WriteString(rec.OriginalName)
+	b.WriteString(": ")
+	b.WriteString(firstSentence(summary))
+
+	if len(rec.Tags) > 0 {
+		b.WriteString(". Parameters: ")
+		b.WriteString(strings.Join(rec.Tags, ", "))
+	}
+
+	if keywords != "" {
+		b.WriteString(". Keywords: ")
+		b.WriteString(keywords)
+	}
+
+	return b.String()
+}
+
+// ComputeEmbeddingTextHash returns a hex-encoded SHA-256 of the embedding text.
+// This is stored alongside the embedding vector so we can detect when the text
+// changes (e.g. user_summary edit) even when VersionHash hasn't changed.
+func ComputeEmbeddingTextHash(embeddingText string) string {
+	h := sha256.Sum256([]byte(embeddingText))
+	return hex.EncodeToString(h[:])
+}
+
+// splitSummaryKeywords splits a summary like "Does X. [keywords: azure, firewall]"
+// into ("Does X.", "azure, firewall"). Returns ("original", "") if no keyword block.
+func splitSummaryKeywords(summary string) (string, string) {
+	idx := strings.LastIndex(summary, "[keywords:")
+	if idx < 0 {
+		idx = strings.LastIndex(summary, "[Keywords:")
+	}
+	if idx < 0 {
+		return summary, ""
+	}
+	end := strings.LastIndex(summary, "]")
+	if end <= idx {
+		return summary, ""
+	}
+	kwBlock := summary[idx+len("[keywords:") : end]
+	kwBlock = strings.TrimSpace(kwBlock)
+	body := strings.TrimSpace(summary[:idx])
+	return body, kwBlock
+}
+
+// firstSentence extracts the first sentence (up to the first ". " or ".\n" or end of string).
+// Avoids cutting mid-word for very long descriptions.
+func firstSentence(s string) string {
+	s = strings.TrimSpace(s)
+	for i := 0; i < len(s)-1; i++ {
+		if s[i] == '.' && (s[i+1] == ' ' || s[i+1] == '\n') {
+			return s[:i+1]
+		}
+	}
+	return s
 }
 
 func promptArgsToInputSchemaJSON(argsJSON []byte) string {

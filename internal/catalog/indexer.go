@@ -232,8 +232,19 @@ func (ix *Indexer) enrichAndAppend(ctx context.Context, rec *models.CapabilityRe
 		rec.GeneratedSummary = sum
 	}
 	RefreshSearchText(rec)
-	reuseEmb := ix.Embed != nil && gerr == nil && old.VersionHash == rec.VersionHash &&
-		old.EmbeddingModel == ix.Embed.ModelName() && len(old.EmbeddingVector) > 0
+
+	// Compute embedding text hash for cache invalidation.
+	// Reuse the old embedding only when the model matches AND the embedding text
+	// hasn't changed (catches user_summary edits that VersionHash misses).
+	embText := BuildEmbeddingText(rec)
+	embTextHash := ComputeEmbeddingTextHash(embText)
+	rec.EmbeddingTextHash = embTextHash
+
+	reuseEmb := ix.Embed != nil && gerr == nil &&
+		old.EmbeddingModel == ix.Embed.ModelName() &&
+		len(old.EmbeddingVector) > 0 &&
+		old.EmbeddingTextHash != "" &&
+		old.EmbeddingTextHash == embTextHash
 	if reuseEmb {
 		rec.EmbeddingVector = old.EmbeddingVector
 		rec.EmbeddingModel = old.EmbeddingModel
@@ -248,7 +259,7 @@ func (ix *Indexer) flushPending(ctx context.Context, src models.Source, pending 
 		var needIdx []int
 		for i := range pending {
 			if !pending[i].reuseEmb {
-				texts = append(texts, pending[i].rec.SearchText)
+				texts = append(texts, BuildEmbeddingText(&pending[i].rec))
 				needIdx = append(needIdx, i)
 			}
 		}
@@ -257,7 +268,7 @@ func (ix *Indexer) flushPending(ctx context.Context, src models.Source, pending 
 			if eerr != nil {
 				ix.Log.Warn("batch embed failed, falling back per row", "source", src.ID, "err", eerr)
 				for _, i := range needIdx {
-					v, err2 := ix.Embed.Embed(ctx, []string{pending[i].rec.SearchText})
+					v, err2 := ix.Embed.Embed(ctx, []string{BuildEmbeddingText(&pending[i].rec)})
 					if err2 != nil {
 						ix.Log.Warn("embed failed", "kind", pending[i].rec.Kind, "name", pending[i].rec.OriginalName, "err", err2)
 						continue

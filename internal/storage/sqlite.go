@@ -44,6 +44,12 @@ func OpenSQLite(path string) (*SQLiteStore, error) {
 			return nil, fmt.Errorf("migrate user_summary: %w", err)
 		}
 	}
+	if _, err := s.db.Exec(`ALTER TABLE capabilities ADD COLUMN embedding_text_hash TEXT NOT NULL DEFAULT ''`); err != nil {
+		if !strings.Contains(strings.ToLower(err.Error()), "duplicate column") {
+			_ = db.Close()
+			return nil, fmt.Errorf("migrate embedding_text_hash: %w", err)
+		}
+	}
 	ctx := context.Background()
 	if err := s.ensureFTS(ctx); err != nil {
 		_ = db.Close()
@@ -142,8 +148,8 @@ func (s *SQLiteStore) UpsertCapability(ctx context.Context, rec models.Capabilit
 INSERT INTO capabilities (
 	id, kind, source_id, source_type, canonical_name, original_name, original_description,
 	generated_summary, user_summary, search_text, input_schema_json, metadata_json, tags_json,
-	embedding_model, embedding_vector, version_hash, last_seen_at
-) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+	embedding_model, embedding_vector, embedding_text_hash, version_hash, last_seen_at
+) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 ON CONFLICT(id) DO UPDATE SET
 	kind=excluded.kind,
 	source_id=excluded.source_id,
@@ -159,12 +165,13 @@ ON CONFLICT(id) DO UPDATE SET
 	tags_json=excluded.tags_json,
 	embedding_model=excluded.embedding_model,
 	embedding_vector=excluded.embedding_vector,
+	embedding_text_hash=excluded.embedding_text_hash,
 	version_hash=excluded.version_hash,
 	last_seen_at=excluded.last_seen_at
 `, rec.ID, rec.Kind, rec.SourceID, rec.SourceType, rec.CanonicalName, rec.OriginalName,
 		rec.OriginalDescription, rec.GeneratedSummary, rec.UserSummary, rec.SearchText, rec.InputSchemaJSON,
 		rec.MetadataJSON, string(tags), rec.EmbeddingModel, encodeFloat32(rec.EmbeddingVector),
-		rec.VersionHash, rec.LastSeenAt.Unix())
+		rec.EmbeddingTextHash, rec.VersionHash, rec.LastSeenAt.Unix())
 	if err != nil {
 		return err
 	}
@@ -183,7 +190,7 @@ func scanRec(row *sql.Row) (models.CapabilityRecord, error) {
 		&rec.ID, &rec.Kind, &rec.SourceID, &rec.SourceType, &rec.CanonicalName,
 		&rec.OriginalName, &rec.OriginalDescription, &rec.GeneratedSummary, &rec.UserSummary, &rec.SearchText,
 		&rec.InputSchemaJSON, &rec.MetadataJSON, &tagsJSON, &rec.EmbeddingModel, &emb,
-		&rec.VersionHash, &last,
+		&rec.EmbeddingTextHash, &rec.VersionHash, &last,
 	)
 	if err != nil {
 		return rec, err
@@ -198,7 +205,7 @@ func (s *SQLiteStore) GetCapability(ctx context.Context, id string) (models.Capa
 	row := s.db.QueryRowContext(ctx, `
 SELECT id, kind, source_id, source_type, canonical_name, original_name, original_description,
 	generated_summary, user_summary, search_text, input_schema_json, metadata_json, tags_json,
-	embedding_model, embedding_vector, version_hash, last_seen_at
+	embedding_model, embedding_vector, embedding_text_hash, version_hash, last_seen_at
 FROM capabilities WHERE id=?`, id)
 	return scanRec(row)
 }
@@ -207,7 +214,7 @@ func (s *SQLiteStore) GetByCanonicalName(ctx context.Context, canonical string) 
 	row := s.db.QueryRowContext(ctx, `
 SELECT id, kind, source_id, source_type, canonical_name, original_name, original_description,
 	generated_summary, user_summary, search_text, input_schema_json, metadata_json, tags_json,
-	embedding_model, embedding_vector, version_hash, last_seen_at
+	embedding_model, embedding_vector, embedding_text_hash, version_hash, last_seen_at
 FROM capabilities WHERE canonical_name=?`, canonical)
 	return scanRec(row)
 }
@@ -228,7 +235,7 @@ func (s *SQLiteStore) listRows(ctx context.Context, query string, args ...any) (
 			&rec.ID, &rec.Kind, &rec.SourceID, &rec.SourceType, &rec.CanonicalName,
 			&rec.OriginalName, &rec.OriginalDescription, &rec.GeneratedSummary, &rec.UserSummary, &rec.SearchText,
 			&rec.InputSchemaJSON, &rec.MetadataJSON, &tagsJSON, &rec.EmbeddingModel, &emb,
-			&rec.VersionHash, &last,
+			&rec.EmbeddingTextHash, &rec.VersionHash, &last,
 		); err != nil {
 			return nil, err
 		}
@@ -244,7 +251,7 @@ func (s *SQLiteStore) ListBySource(ctx context.Context, sourceID string) ([]mode
 	return s.listRows(ctx, `
 SELECT id, kind, source_id, source_type, canonical_name, original_name, original_description,
 	generated_summary, user_summary, search_text, input_schema_json, metadata_json, tags_json,
-	embedding_model, embedding_vector, version_hash, last_seen_at
+	embedding_model, embedding_vector, embedding_text_hash, version_hash, last_seen_at
 FROM capabilities WHERE source_id=? ORDER BY canonical_name`, sourceID)
 }
 
@@ -253,7 +260,7 @@ func (s *SQLiteStore) ListBySourceWithLimit(ctx context.Context, sourceID string
 	return s.listRows(ctx, `
 SELECT id, kind, source_id, source_type, canonical_name, original_name, original_description,
 	generated_summary, user_summary, search_text, input_schema_json, metadata_json, tags_json,
-	embedding_model, embedding_vector, version_hash, last_seen_at
+	embedding_model, embedding_vector, embedding_text_hash, version_hash, last_seen_at
 FROM capabilities WHERE source_id=? ORDER BY canonical_name LIMIT ?`, sourceID, limit)
 }
 
@@ -261,7 +268,7 @@ func (s *SQLiteStore) ListAll(ctx context.Context) ([]models.CapabilityRecord, e
 	return s.listRows(ctx, `
 SELECT id, kind, source_id, source_type, canonical_name, original_name, original_description,
 	generated_summary, user_summary, search_text, input_schema_json, metadata_json, tags_json,
-	embedding_model, embedding_vector, version_hash, last_seen_at
+	embedding_model, embedding_vector, embedding_text_hash, version_hash, last_seen_at
 FROM capabilities ORDER BY source_id, canonical_name`)
 }
 
