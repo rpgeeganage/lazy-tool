@@ -1,12 +1,13 @@
 #!/bin/sh
 set -eu
 
-# lazy-tool installer
+# lazy-tool-x installer
 # Usage:
-#   curl -sSfL https://raw.githubusercontent.com/rpgeeganage/lazy-tool/main/install.sh | sh
+#   curl -sSfL https://raw.githubusercontent.com/cjnova/lazy-tool-x/main/install.sh | sh
 #   curl -sSfL ... | INSTALL_DIR=/usr/local/bin sh
 
-REPO="rpgeeganage/lazy-tool"
+REPO="cjnova/lazy-tool-x"
+BIN_NAME="lazy-tool-x"
 INSTALL_DIR="${INSTALL_DIR:-./bin}"
 
 fail() {
@@ -59,9 +60,9 @@ main() {
     fail "Could not determine latest version. Check https://github.com/${REPO}/releases"
   fi
 
-  printf 'Installing lazy-tool v%s (%s/%s)\n' "$VERSION" "$OS" "$ARCH"
+  printf 'Installing %s v%s (%s/%s)\n' "$BIN_NAME" "$VERSION" "$OS" "$ARCH"
 
-  ARCHIVE="lazy-tool_${VERSION}_${OS}_${ARCH}.tar.gz"
+  ARCHIVE="${BIN_NAME}_${VERSION}_${OS}_${ARCH}.tar.gz"
   BASE_URL="https://github.com/${REPO}/releases/download/v${VERSION}"
 
   TMPDIR="$(mktemp -d)"
@@ -93,11 +94,11 @@ main() {
   tar -xzf "${TMPDIR}/${ARCHIVE}" -C "${TMPDIR}"
 
   mkdir -p "$INSTALL_DIR"
-  mv "${TMPDIR}/lazy-tool" "${INSTALL_DIR}/lazy-tool"
-  chmod +x "${INSTALL_DIR}/lazy-tool"
+  mv "${TMPDIR}/${BIN_NAME}" "${INSTALL_DIR}/${BIN_NAME}"
+  chmod +x "${INSTALL_DIR}/${BIN_NAME}"
 
-  printf 'Installed lazy-tool to %s/lazy-tool\n' "$INSTALL_DIR"
-  printf 'Run "%s/lazy-tool version" to verify.\n' "$INSTALL_DIR"
+  printf 'Installed %s to %s/%s\n' "$BIN_NAME" "$INSTALL_DIR" "$BIN_NAME"
+  printf 'Run "%s/%s version" to verify.\n' "$INSTALL_DIR" "$BIN_NAME"
 }
 
 main
