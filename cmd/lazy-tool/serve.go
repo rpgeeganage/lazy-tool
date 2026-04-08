@@ -27,7 +27,7 @@ func newServeCmd() *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   "serve",
-		Short: "Run lazy-tool as an MCP server exposing search_tools (stdio) or all tools (direct/hybrid, stdio/http)",
+		Short: "Run lazy-tool-x as an MCP server exposing search_tools (stdio) or all tools (direct/hybrid, stdio/http)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			path := resolveConfigPath()
 			if path == "" {
