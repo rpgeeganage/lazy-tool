@@ -27,7 +27,7 @@ That factory is separate from lazy-tool-x serve or reindex: probing does not att
 			log := slog.Default()
 			path := resolveConfigPath()
 			if path == "" {
-				return fmt.Errorf("config path required: use --config or LAZY_TOOL_CONFIG")
+				return fmt.Errorf("config path required: use --config or LAZY_TOOL_X_CONFIG (fallback LAZY_TOOL_CONFIG)")
 			}
 			cfg, err := config.Load(path)
 			if err != nil {

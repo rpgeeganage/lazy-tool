@@ -16,7 +16,7 @@ func main() {
 		Use:   "lazy-tool-x",
 		Short: "Local-first MCP discovery proxy for token-efficient tool search",
 	}
-	root.PersistentFlags().StringVar(&configPath, "config", "", "path to YAML config (or set LAZY_TOOL_CONFIG)")
+	root.PersistentFlags().StringVar(&configPath, "config", "", "path to YAML config (or set LAZY_TOOL_X_CONFIG, fallback LAZY_TOOL_CONFIG)")
 
 	root.AddCommand(newVersionCmd())
 	root.AddCommand(newHealthCmd())
@@ -40,6 +40,9 @@ func main() {
 func resolveConfigPath() string {
 	if configPath != "" {
 		return configPath
+	}
+	if v := os.Getenv("LAZY_TOOL_X_CONFIG"); v != "" {
+		return v
 	}
 	if v := os.Getenv("LAZY_TOOL_CONFIG"); v != "" {
 		return v

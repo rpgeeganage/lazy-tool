@@ -20,7 +20,7 @@ func newReindexCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			path := resolveConfigPath()
 			if path == "" {
-				return errors.New("config path required: use --config or LAZY_TOOL_CONFIG")
+				return errors.New("config path required: use --config or LAZY_TOOL_X_CONFIG (fallback LAZY_TOOL_CONFIG)")
 			}
 			stack, err := runtime.OpenStack(path)
 			if err != nil {
