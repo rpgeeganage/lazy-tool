@@ -273,20 +273,20 @@ See `docs/summary-refinement.md` for the workflow.
 
 ## Auto-import from IDE configs
 
-`lazy-tool` can automatically discover MCP server configurations from Claude Desktop, Cursor, and VS Code — no manual YAML writing needed.
+`lazy-tool-x` can automatically discover MCP server configurations from Claude Desktop, Cursor, and VS Code — no manual YAML writing needed.
 
 ```bash
 # Preview what would be imported (prints YAML to stdout)
-lazy-tool import
+lazy-tool-x import
 
 # Import from a specific IDE
-lazy-tool import --from claude
-lazy-tool import --from cursor
-lazy-tool import --from vscode
+lazy-tool-x import --from claude
+lazy-tool-x import --from cursor
+lazy-tool-x import --from vscode
 
 # Write config directly
-lazy-tool import --write
-lazy-tool import --write --output my-config.yaml
+lazy-tool-x import --write
+lazy-tool-x import --write --output my-config.yaml
 ```
 
 Supported config file locations:
@@ -437,7 +437,7 @@ cache:
 
 ## Search algorithm
 
-`lazy-tool` uses **hybrid retrieval** combining lexical and optional vector search.
+`lazy-tool-x` uses **hybrid retrieval** combining lexical and optional vector search.
 
 ```
 query("echo")
@@ -478,10 +478,10 @@ Sources with `fallback: passthrough` return their full catalog when search retur
 
 ## Response cache
 
-When enabled, `lazy-tool` caches upstream responses in memory (LRU + TTL). Keyed by SHA-256 of tool name + input arguments. Per-source exclusion for mutation-heavy tools. Cache hits visible in trace logs and web UI.
+When enabled, `lazy-tool-x` caches upstream responses in memory (LRU + TTL). Keyed by SHA-256 of tool name + input arguments. Per-source exclusion for mutation-heavy tools. Cache hits visible in trace logs and web UI.
 
 ```bash
-lazy-tool cache-clear
+lazy-tool-x cache-clear
 ```
 
 ---
@@ -489,8 +489,8 @@ lazy-tool cache-clear
 ## Web UI and TUI
 
 ```bash
-./bin/lazy-tool web --addr 127.0.0.1:8765   # browser UI: search, inspect, traces
-./bin/lazy-tool tui                           # terminal UI: bubbletea-based
+./bin/lazy-tool-x web --addr 127.0.0.1:8765   # browser UI: search, inspect, traces
+./bin/lazy-tool-x tui                           # terminal UI: bubbletea-based
 ```
 
 ---
@@ -502,7 +502,7 @@ lazy-tool cache-clear
 ```mermaid
 xychart-beta
     title "No-tool baseline: average input tokens"
-    x-axis ["Direct MCP", "lazy-tool"]
+    x-axis ["Direct MCP", "lazy-tool-x"]
     y-axis "Tokens" 0 --> 1800
     bar [1701, 915]
 ```
@@ -510,7 +510,7 @@ xychart-beta
 ```mermaid
 xychart-beta
     title "No-tool baseline: average latency (seconds)"
-    x-axis ["Direct MCP", "lazy-tool"]
+    x-axis ["Direct MCP", "lazy-tool-x"]
     y-axis "Seconds" 0 --> 0.3
     bar [0.232, 0.158]
 ```
@@ -560,7 +560,7 @@ Full methodology: [benchmark/README.md](benchmark/README.md)
 | Document | Contents |
 |---|---|
 | **This file** | Value prop, quick start, reference |
-| [docs/plugging-existing-mcps.md](docs/plugging-existing-mcps.md) | Connect `lazy-tool` to your existing MCP servers |
+| [docs/plugging-existing-mcps.md](docs/plugging-existing-mcps.md) | Connect `lazy-tool-x` to your existing MCP servers |
 | [benchmark/README.md](benchmark/README.md) | Full benchmark methodology and reproducibility |
 | [docs/benchmark-charts.html](docs/benchmark-charts.html) | Interactive Chart.js visualizations |
 | [configs/example.yaml](configs/example.yaml) | Annotated reference config |

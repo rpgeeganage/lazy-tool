@@ -14,7 +14,7 @@ This folder contains local helper files for running the benchmark environment wi
 
 Use it when you want a reproducible local setup for:
 
-- `lazy-tool reindex`
+- `lazy-tool-x reindex`
 - discovery and search validation
 - benchmark runs against a merged local MCP gateway
 
@@ -56,7 +56,7 @@ If your environment differs, edit the JSON configs in this folder first.
 
 ```mermaid
 flowchart TD
-    A[Register sample MCPs] --> B[Run lazy-tool reindex]
+    A[Register sample MCPs] --> B[Run lazy-tool-x reindex]
     B --> C[Validate catalog searches]
     C --> D[Run benchmark suite]
 ```
@@ -68,19 +68,19 @@ cd benchmark/mcpjungle-dev
 ./register-samples.sh
 ```
 
-### 2. Reindex lazy-tool
+### 2. Reindex lazy-tool-x
 
 ```bash
 export LAZY_TOOL_CONFIG=$PWD/../configs/mcpjungle-lazy-tool.yaml
-cd ../.. && make build && ./bin/lazy-tool reindex
+cd ../.. && make build && ./bin/lazy-tool-x reindex
 ```
 
 ### 3. Validate search
 
 ```bash
-./bin/lazy-tool search "echo" --limit 10
-./bin/lazy-tool search "prompt" --limit 10
-./bin/lazy-tool search "resource" --limit 10
+./bin/lazy-tool-x search "echo" --limit 10
+./bin/lazy-tool-x search "prompt" --limit 10
+./bin/lazy-tool-x search "resource" --limit 10
 ```
 
 ## Troubleshooting
@@ -89,7 +89,7 @@ cd ../.. && make build && ./bin/lazy-tool reindex
 
 Make sure you are using the JSON config files and not an empty command invocation.
 
-### lazy-tool search returns nothing
+### lazy-tool-x search returns nothing
 
 Usually:
 - sample MCPs were not registered

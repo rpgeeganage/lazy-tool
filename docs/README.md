@@ -24,11 +24,11 @@ That page covers:
 
 ## Integration docs
 
-- [Plugging existing MCPs into lazy-tool](plugging-existing-mcps.md)
+- [Plugging existing MCPs into lazy-tool-x](plugging-existing-mcps.md)
 
-Use that doc when you want to point `lazy-tool` at MCP servers or MCP gateways you already run locally.
+Use that doc when you want to point `lazy-tool-x` at MCP servers or MCP gateways you already run locally.
 
-**Fastest path**: if your MCP servers are already configured in Claude Desktop, Cursor, or VS Code, use `lazy-tool import --write` to auto-generate a config.
+**Fastest path**: if your MCP servers are already configured in Claude Desktop, Cursor, or VS Code, use `lazy-tool-x import --write` to auto-generate a config.
 
 ## Benchmark docs
 

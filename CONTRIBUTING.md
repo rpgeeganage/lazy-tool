@@ -1,4 +1,4 @@
-# Contributing to lazy-tool
+# Contributing to lazy-tool-x
 
 ## Table of contents
 
@@ -13,7 +13,7 @@
 
 ## Project mindset
 
-`lazy-tool` is a **local-first, local-only MCP discovery runtime**.
+`lazy-tool-x` is a **local-first, local-only MCP discovery runtime**.
 
 Please keep contributions aligned with that identity.
 
@@ -73,15 +73,15 @@ make lint
 ## Core commands
 
 ```bash
-./bin/lazy-tool health
-./bin/lazy-tool health --probe
-./bin/lazy-tool reindex
-./bin/lazy-tool sources --status
-./bin/lazy-tool search "echo" --limit 5
-./bin/lazy-tool inspect <proxy_tool_name>
-./bin/lazy-tool serve
-./bin/lazy-tool web --addr 127.0.0.1:8765
-./bin/lazy-tool tui
+./bin/lazy-tool-x health
+./bin/lazy-tool-x health --probe
+./bin/lazy-tool-x reindex
+./bin/lazy-tool-x sources --status
+./bin/lazy-tool-x search "echo" --limit 5
+./bin/lazy-tool-x inspect <proxy_tool_name>
+./bin/lazy-tool-x serve
+./bin/lazy-tool-x web --addr 127.0.0.1:8765
+./bin/lazy-tool-x tui
 ```
 
 ## Code style expectations

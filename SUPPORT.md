@@ -23,8 +23,8 @@ Please gather:
 - your config shape (redact secrets)
 - whether the source is HTTP or stdio
 - exact command or output
-- `lazy-tool sources --status`
-- `lazy-tool search "<query>" --limit 10`
+- `lazy-tool-x sources --status`
+- `lazy-tool-x search "<query>" --limit 10`
 - relevant logs or errors
 - whether you ran `reindex`
 

@@ -1,4 +1,4 @@
-# Benchmarking lazy-tool
+# Benchmarking lazy-tool-x
 
 ## Table of contents
 
@@ -18,11 +18,11 @@
 
 ## What this benchmark is for
 
-This benchmark measures how `lazy-tool` behaves compared with direct MCP gateway attachment across multiple modes and providers.
+This benchmark measures how `lazy-tool-x` behaves compared with direct MCP gateway attachment across multiple modes and providers.
 
 It is mainly useful for answering questions like:
 
-- does `lazy-tool` reduce prompt overhead? (search mode)
+- does `lazy-tool-x` reduce prompt overhead? (search mode)
 - does direct mode add meaningful overhead vs baseline?
 - does the smaller MCP surface help on discovery tasks?
 - are search and retrieval flows working?
@@ -54,7 +54,7 @@ Publishing honest benchmark claims is part of the project's reputation.
 
 ### Prerequisites
 
-- Go 1.25+ (to build lazy-tool)
+- Go 1.25+ (to build lazy-tool-x)
 - Node.js / npx (for the `everything` and `filesystem` MCP servers)
 - Python 3.11+ (for the benchmark harnesses)
 - [uv](https://docs.astral.sh/uv/) (recommended, for `mcp-server-time` via `uvx`)
@@ -63,7 +63,7 @@ Publishing honest benchmark claims is part of the project's reputation.
 
 ### Setting up MCPJungle
 
-The benchmarks use [MCPJungle](https://github.com/mcpjungle/MCPJungle) as the upstream MCP gateway that hosts the test tools. Baseline mode connects directly to MCPJungle; search and direct modes connect through lazy-tool which indexes MCPJungle's catalog.
+The benchmarks use [MCPJungle](https://github.com/mcpjungle/MCPJungle) as the upstream MCP gateway that hosts the test tools. Baseline mode connects directly to MCPJungle; search and direct modes connect through lazy-tool-x which indexes MCPJungle's catalog.
 
 **1. Install MCPJungle:**
 
@@ -91,7 +91,7 @@ This registers three MCP servers into MCPJungle:
 | Server | Transport | What it provides | Requires |
 |--------|-----------|-----------------|----------|
 | `everything` | stdio | echo tool, prompts, resources (MCP reference server) | npx |
-| `filesystem` | stdio | read/write/list tools scoped to `/tmp/lazy-tool-mcpjungle-fs` | npx |
+| `filesystem` | stdio | read/write/list tools scoped to `/tmp/lazy-tool-x-mcpjungle-fs` | npx |
 | `time` | stdio | time conversion tools | uvx |
 
 **4. Verify tools are registered:**
@@ -128,16 +128,16 @@ ollama pull qwen2.5:3b          # pull at least one model
 ```bash
 make build
 export LAZY_TOOL_CONFIG=$PWD/benchmark/configs/mcpjungle-lazy-tool.yaml
-./bin/lazy-tool reindex
-./bin/lazy-tool sources --status
+./bin/lazy-tool-x reindex
+./bin/lazy-tool-x sources --status
 ```
 
 ### 2. Sanity-check the catalog
 
 ```bash
-./bin/lazy-tool search "echo" --limit 10
-./bin/lazy-tool search "prompt" --limit 10
-./bin/lazy-tool search "resource" --limit 10
+./bin/lazy-tool-x search "echo" --limit 10
+./bin/lazy-tool-x search "prompt" --limit 10
+./bin/lazy-tool-x search "resource" --limit 10
 ```
 
 ### 3. Run the clean README suite
@@ -150,7 +150,7 @@ export LAZY_TOOL_CONFIG=$PWD/benchmark/configs/mcpjungle-lazy-tool.yaml
 
 ```mermaid
 flowchart TD
-    A[Build lazy-tool] --> B[Run reindex]
+    A[Build lazy-tool-x] --> B[Run reindex]
     B --> C[Check sources --status]
     C --> D[Validate echo/prompt/resource hits]
     D --> E[Run clean benchmark suite]
@@ -177,8 +177,8 @@ The multi-provider suite (`run_multi_provider_benchmark.py`) extends the origina
 | Mode | Description | Tool surface |
 |---|---|---|
 | **baseline** | Direct MCP via MCPJungle (no lazy-tool) | All upstream tools |
-| **search** | lazy-tool's 5 meta-tools via stdio | search_tools → invoke_proxy_tool |
-| **direct** | lazy-tool as transparent aggregator via stdio | All cataloged tools proxied |
+| **search** | lazy-tool-x's 5 meta-tools via stdio | search_tools → invoke_proxy_tool |
+| **direct** | lazy-tool-x as transparent aggregator via stdio | All cataloged tools proxied |
 
 ### Running
 
@@ -224,7 +224,7 @@ python benchmark/scripts/test_multi_provider_harness.py -v
 
 ## Weak-model (Ollama) benchmark suite
 
-The weak-model suite (`run_weak_model_benchmark.py`) tests local models via Ollama to measure whether the search-first approach helps small models use MCP tools — specifically in the local, single-binary setup that lazy-tool provides.
+The weak-model suite (`run_weak_model_benchmark.py`) tests local models via Ollama to measure whether the search-first approach helps small models use MCP tools — specifically in the local, single-binary setup that lazy-tool-x provides.
 
 ### Three tiers
 
@@ -324,7 +324,7 @@ Useful routed-tool benchmark, but only publish if lazy-mode wrapper and tool sel
 | Scenario | Avg input tokens | Avg latency |
 |---|---:|---:|
 | Direct MCP gateway | 1701 | 0.232s |
-| `lazy-tool` stdio | 915 | 0.158s |
+| `lazy-tool-x` stdio | 915 | 0.158s |
 
 **Headline result**
 - **46.2% lower input tokens**
@@ -383,8 +383,8 @@ Usually:
 Verify with:
 ```bash
 export LAZY_TOOL_CONFIG=$PWD/benchmark/configs/mcpjungle-lazy-tool.yaml
-./bin/lazy-tool reindex
-./bin/lazy-tool search "echo" --limit 5
+./bin/lazy-tool-x reindex
+./bin/lazy-tool-x search "echo" --limit 5
 ```
 
 ### routed task chooses the wrong wrapper
