@@ -72,7 +72,7 @@ func TestOperationLogSummariesAndTimeline(t *testing.T) {
 	if sources[0].LastReindexOK == nil || !*sources[0].LastReindexOK {
 		t.Fatalf("expected reindex health: %#v", sources[0])
 	}
-	if sources[0].ErrorClasses["auth"] != 1 || sources[0].ErrorClasses["unknown"] != 1 {
+	if sources[0].ErrorClasses["auth"] != 1 || len(sources[0].ErrorClasses) != 1 {
 		t.Fatalf("expected auth class on source stats: %#v", sources[0].ErrorClasses)
 	}
 }
