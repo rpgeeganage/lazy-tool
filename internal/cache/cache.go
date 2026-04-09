@@ -137,6 +137,14 @@ func (c *Cache) Stats() (hits, misses int64, size int) {
 	return c.hits.Load(), c.misses.Load(), size
 }
 
+// MaxEntries returns the configured cache capacity.
+func (c *Cache) MaxEntries() int {
+	if c == nil {
+		return 0
+	}
+	return c.maxEntries
+}
+
 // evictLRU removes the least recently used entry. Must be called with mu held.
 func (c *Cache) evictLRU() {
 	var oldestKey string

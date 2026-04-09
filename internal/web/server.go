@@ -56,6 +56,11 @@ type inspectPageData struct {
 
 func ListenAndServe(addr string, stack *runtime.Stack) error {
 	addr = NormalizeListenAddr(addr)
+	mux := newMux(stack)
+	return http.ListenAndServe(addr, mux)
+}
+
+func newMux(stack *runtime.Stack) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		_ = rootTmpl.ExecuteTemplate(w, "home", nil)
@@ -249,7 +254,86 @@ func ListenAndServe(addr string, stack *runtime.Stack) error {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write(b)
 	})
-	return http.ListenAndServe(addr, mux)
+	mux.HandleFunc("/stats", func(w http.ResponseWriter, r *http.Request) {
+		summary, err := stack.Store.SummarizeOperations(r.Context())
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		cacheStats := map[string]any{"enabled": stack.Cache != nil}
+		if stack.Cache != nil {
+			hits, misses, size := stack.Cache.Stats()
+			hitRate := 0.0
+			if total := hits + misses; total > 0 {
+				hitRate = float64(hits) / float64(total)
+			}
+			cacheStats = map[string]any{
+				"enabled":   true,
+				"hits":      hits,
+				"misses":    misses,
+				"size":      size,
+				"max":       stack.Cache.MaxEntries(),
+				"hit_rate":  hitRate,
+			}
+		}
+		out := map[string]any{
+			"operations": summary,
+			"cache":      cacheStats,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(out)
+	})
+	mux.HandleFunc("/stats/search", func(w http.ResponseWriter, r *http.Request) {
+		bucketMinutes := 60
+		limit := 24
+		points, err := stack.Store.SearchTimeline(r.Context(), bucketMinutes, limit)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"bucket_minutes": bucketMinutes,
+			"points":         points,
+		})
+	})
+	mux.HandleFunc("/stats/sources", func(w http.ResponseWriter, r *http.Request) {
+		stats, err := stack.Store.SourceOperationSummaries(r.Context())
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(stats)
+	})
+	mux.HandleFunc("/cache/stats", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if stack.Cache == nil {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"enabled":  false,
+				"hits":     0,
+				"misses":   0,
+				"size":     0,
+				"max":      0,
+				"hit_rate": 0.0,
+			})
+			return
+		}
+		hits, misses, size := stack.Cache.Stats()
+		hitRate := 0.0
+		if total := hits + misses; total > 0 {
+			hitRate = float64(hits) / float64(total)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"enabled":  true,
+			"hits":     hits,
+			"misses":   misses,
+			"size":     size,
+			"max":      stack.Cache.MaxEntries(),
+			"hit_rate": hitRate,
+		})
+	})
+	return mux
 }
 
 const defaultWebListenPort = "8765"
