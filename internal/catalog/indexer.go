@@ -264,7 +264,22 @@ func (ix *Indexer) flushPending(ctx context.Context, src models.Source, pending 
 			}
 		}
 		if len(texts) > 0 {
+			embedStarted := time.Now()
 			vecs, eerr := ix.Embed.Embed(ctx, texts)
+			durationMS := time.Since(embedStarted).Milliseconds()
+			metrics.EmbeddingBatchDuration(src.ID, len(texts), durationMS, eerr != nil, eerr)
+			if ix.Store != nil {
+				_ = ix.Store.RecordOperation(ctx, storage.OperationLogEvent{
+					Operation:  "embed",
+					SourceID:   src.ID,
+					DurationMS: durationMS,
+					Metadata: map[string]any{
+						"batch_size": len(texts),
+						"fallback":   eerr != nil,
+					},
+					Error: errorString(eerr),
+				})
+			}
 			if eerr != nil {
 				ix.Log.Warn("batch embed failed, falling back per row", "source", src.ID, "err", eerr)
 				for _, i := range needIdx {
@@ -299,9 +314,27 @@ func (ix *Indexer) flushPending(ctx context.Context, src models.Source, pending 
 }
 
 func (ix *Indexer) indexSource(ctx context.Context, src models.Source) error {
+	started := time.Now()
+	recordDone := func(pendingCount, staleRemoved int, err error) {
+		durationMS := time.Since(started).Milliseconds()
+		metrics.ReindexSourceDone(src.ID, pendingCount, staleRemoved, err)
+		metrics.ReindexSourceDuration(src.ID, durationMS, err)
+		if ix.Store != nil {
+			_ = ix.Store.RecordOperation(ctx, storage.OperationLogEvent{
+				Operation:  "reindex",
+				SourceID:   src.ID,
+				DurationMS: durationMS,
+				Metadata: map[string]any{
+					"pending":       pendingCount,
+					"stale_removed": staleRemoved,
+				},
+				Error: errorString(err),
+			})
+		}
+	}
 	conn, err := ix.Factory.New(ctx, src)
 	if err != nil {
-		metrics.ReindexSourceDone(src.ID, 0, 0, err)
+		recordDone(0, 0, err)
 		return err
 	}
 	defer func() { _ = conn.Close() }()
@@ -312,7 +345,7 @@ func (ix *Indexer) indexSource(ctx context.Context, src models.Source) error {
 
 	snap, err := conn.ListForIndex(ctx)
 	if err != nil {
-		metrics.ReindexSourceDone(src.ID, 0, 0, err)
+		recordDone(0, 0, err)
 		return err
 	}
 	for _, meta := range snap.Tools {
@@ -356,16 +389,23 @@ func (ix *Indexer) indexSource(ctx context.Context, src models.Source) error {
 	}
 
 	if err := ix.flushPending(ctx, src, pending, keep); err != nil {
-		metrics.ReindexSourceDone(src.ID, len(pending), 0, err)
+		recordDone(len(pending), 0, err)
 		return err
 	}
 
 	n, err := ix.Store.DeleteStale(ctx, src.ID, keep)
 	if err != nil {
-		metrics.ReindexSourceDone(src.ID, len(pending), 0, err)
+		recordDone(len(pending), 0, err)
 		return err
 	}
-	metrics.ReindexSourceDone(src.ID, len(pending), n, nil)
+	recordDone(len(pending), n, nil)
 	ix.Log.Info("indexed source", "source", src.ID, "rows", len(pending), "removed_stale", n)
 	return nil
+}
+
+func errorString(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }
