@@ -5,6 +5,7 @@ import (
 	"errors"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"lazy-tool/internal/connectors"
 	"lazy-tool/internal/storage"
@@ -24,6 +25,10 @@ func (f *stubFactory) New(ctx context.Context, src models.Source) (connectors.Co
 
 func (f *stubFactory) CircuitBreakerFor(sourceID string) *connectors.CircuitBreaker {
 	return nil
+}
+
+func (f *stubFactory) SeedCircuitBreaker(sourceID string, state connectors.CircuitState, failures int, lastFailedAt time.Time) {
+	_, _, _, _ = sourceID, state, failures, lastFailedAt
 }
 
 func (f *stubFactory) Close() error {

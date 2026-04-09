@@ -71,15 +71,18 @@ func withProxyConn(ctx context.Context, stack *runtime.Stack, log *slog.Logger,
 	}
 	conn, err := stack.Factory.New(ctx, src)
 	if err != nil {
-		recordCircuitAndTrace(proxyResult{rec: rec, cb: cb}, log, ctx, proxyName, err, "")
+		recordCircuitAndTrace(proxyResult{rec: rec, cb: cb}, stack.Store, log, ctx, proxyName, err, "")
 		return proxyResult{}, err
 	}
 	return proxyResult{rec: rec, conn: conn, cb: cb}, nil
 }
 
 // recordCircuitAndTrace records success/failure on the circuit breaker, fires metrics hooks, and logs the invocation.
-func recordCircuitAndTrace(pr proxyResult, log *slog.Logger, ctx context.Context, proxyName string, err error, traceNameOverride string) {
+func recordCircuitAndTrace(pr proxyResult, store *storage.SQLiteStore, log *slog.Logger, ctx context.Context, proxyName string, err error, traceNameOverride string) {
+	var before connectors.CircuitSnapshot
+	var after connectors.CircuitSnapshot
 	if pr.cb != nil {
+		before = pr.cb.Snapshot()
 		if err != nil {
 			pr.cb.RecordFailure()
 			if pr.cb.State() == connectors.CircuitOpen {
@@ -92,12 +95,29 @@ func recordCircuitAndTrace(pr proxyResult, log *slog.Logger, ctx context.Context
 				metrics.CircuitBreakerReset(pr.rec.SourceID)
 			}
 		}
+		after = pr.cb.Snapshot()
+		persistCircuitTransition(ctx, store, pr.rec.SourceID, before, after)
 	}
 	tool := pr.rec.OriginalName
 	if traceNameOverride != "" {
 		tool = traceNameOverride
 	}
 	tracing.LogInvocation(ctx, log, proxyName, pr.rec.SourceID, tool, err)
+}
+
+func persistCircuitTransition(ctx context.Context, store *storage.SQLiteStore, sourceID string, before, after connectors.CircuitSnapshot) {
+	if before.State == after.State && before.Failures == after.Failures && before.LastFailedAt.Equal(after.LastFailedAt) {
+		return
+	}
+	if store == nil {
+		return
+	}
+	var lastFailedAt *time.Time
+	if !after.LastFailedAt.IsZero() {
+		tm := after.LastFailedAt.UTC()
+		lastFailedAt = &tm
+	}
+	_ = store.UpdateCircuitState(ctx, sourceID, after.State.String(), after.Failures, lastFailedAt)
 }
 
 // isCacheable checks tool annotations to determine if a tool result should be cached.
@@ -174,7 +194,7 @@ func ExecuteProxy(ctx context.Context, stack *runtime.Stack, log *slog.Logger, p
 	defer func() { _ = pr.conn.Close() }()
 
 	res, err := pr.conn.CallTool(ctx, pr.rec.OriginalName, input)
-	recordCircuitAndTrace(pr, log, ctx, proxyName, err, "")
+	recordCircuitAndTrace(pr, stack.Store, log, ctx, proxyName, err, "")
 	if err != nil {
 		record(pr.rec.SourceID, false, err)
 		return nil, nil, err
@@ -237,7 +257,7 @@ func ExecuteGetPrompt(ctx context.Context, stack *runtime.Stack, log *slog.Logge
 	defer func() { _ = pr.conn.Close() }()
 	strArgs := stringArgumentsFromAny(arguments)
 	res, err := pr.conn.GetPrompt(ctx, pr.rec.OriginalName, strArgs)
-	recordCircuitAndTrace(pr, log, ctx, proxyName, err, "")
+	recordCircuitAndTrace(pr, stack.Store, log, ctx, proxyName, err, "")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -261,7 +281,7 @@ func ExecuteReadResource(ctx context.Context, stack *runtime.Stack, log *slog.Lo
 		return nil, nil, err
 	}
 	res, err := pr.conn.ReadResource(ctx, uri)
-	recordCircuitAndTrace(pr, log, ctx, proxyName, err, uri)
+	recordCircuitAndTrace(pr, stack.Store, log, ctx, proxyName, err, uri)
 	if err != nil {
 		return nil, nil, err
 	}

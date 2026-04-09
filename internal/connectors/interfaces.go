@@ -2,6 +2,7 @@ package connectors
 
 import (
 	"context"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"lazy-tool/pkg/models"
@@ -83,6 +84,7 @@ type Factory interface {
 	New(ctx context.Context, src models.Source) (Connector, error)
 	// CircuitBreakerFor returns the circuit breaker for a source. Returns nil if circuit breaking is disabled.
 	CircuitBreakerFor(sourceID string) *CircuitBreaker
+	SeedCircuitBreaker(sourceID string, state CircuitState, failures int, lastFailedAt time.Time)
 	// Close releases reused HTTP MCP sessions (no-op if none). Call from process shutdown (e.g. Stack.Close).
 	Close() error
 }

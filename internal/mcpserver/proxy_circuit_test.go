@@ -19,7 +19,7 @@ func TestRecordCircuitAndTrace_FailureIncrements(t *testing.T) {
 	}
 	ctx := context.Background()
 	log := slog.Default()
-	recordCircuitAndTrace(pr, log, ctx, "s1__tool", fmt.Errorf("upstream error"), "")
+	recordCircuitAndTrace(pr, nil, log, ctx, "s1__tool", fmt.Errorf("upstream error"), "")
 	if cb.ConsecutiveFailures() != 1 {
 		t.Fatalf("expected 1 failure, got %d", cb.ConsecutiveFailures())
 	}
@@ -33,7 +33,7 @@ func TestRecordCircuitAndTrace_SuccessKeepsClosed(t *testing.T) {
 	}
 	ctx := context.Background()
 	log := slog.Default()
-	recordCircuitAndTrace(pr, log, ctx, "s1__tool", nil, "")
+	recordCircuitAndTrace(pr, nil, log, ctx, "s1__tool", nil, "")
 	if cb.State() != connectors.CircuitClosed {
 		t.Fatalf("expected closed, got %v", cb.State())
 	}
@@ -50,8 +50,8 @@ func TestRecordCircuitAndTrace_TripsCircuit(t *testing.T) {
 	}
 	ctx := context.Background()
 	log := slog.Default()
-	recordCircuitAndTrace(pr, log, ctx, "s1__tool", fmt.Errorf("fail1"), "")
-	recordCircuitAndTrace(pr, log, ctx, "s1__tool", fmt.Errorf("fail2"), "")
+	recordCircuitAndTrace(pr, nil, log, ctx, "s1__tool", fmt.Errorf("fail1"), "")
+	recordCircuitAndTrace(pr, nil, log, ctx, "s1__tool", fmt.Errorf("fail2"), "")
 	if cb.State() != connectors.CircuitOpen {
 		t.Fatalf("expected open, got %v", cb.State())
 	}

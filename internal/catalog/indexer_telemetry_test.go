@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -27,6 +28,10 @@ func (s stubIndexerFactory) New(ctx context.Context, src models.Source) (connect
 func (s stubIndexerFactory) CircuitBreakerFor(sourceID string) *connectors.CircuitBreaker {
 	_ = sourceID
 	return nil
+}
+
+func (s stubIndexerFactory) SeedCircuitBreaker(sourceID string, state connectors.CircuitState, failures int, lastFailedAt time.Time) {
+	_, _, _, _ = sourceID, state, failures, lastFailedAt
 }
 
 func (s stubIndexerFactory) Close() error { return nil }

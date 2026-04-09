@@ -79,6 +79,10 @@ func (s stubFactory) CircuitBreakerFor(sourceID string) *connectors.CircuitBreak
 	return nil
 }
 
+func (s stubFactory) SeedCircuitBreaker(sourceID string, state connectors.CircuitState, failures int, lastFailedAt time.Time) {
+	_, _, _, _ = sourceID, state, failures, lastFailedAt
+}
+
 func (s stubFactory) Close() error { return nil }
 
 func TestExecuteProxyRecordsProxyTelemetry(t *testing.T) {
