@@ -26,6 +26,9 @@ type Indexer struct {
 	Summary  summarizer.Summarizer
 	Embed    embeddings.Embedder
 	EmbeddingTextStrategy string
+	AutoRefineVague bool
+	VaguenessThreshold float64
+	SchemaEnrichment bool
 	Store    *storage.SQLiteStore
 	Vec      *vector.Index
 	Log      *slog.Logger
@@ -233,6 +236,24 @@ func (ix *Indexer) enrichAndAppend(ctx context.Context, rec *models.CapabilityRe
 		rec.GeneratedSummary = sum
 	}
 	enrichRecord(rec)
+	if ix.AutoRefineVague {
+		threshold := ix.VaguenessThreshold
+		if threshold <= 0 {
+			threshold = 0.5
+		}
+		vagueness := ScoreVagueness(rec)
+		if vagueness.Score >= threshold {
+			enriched := *rec
+			enrichment := ""
+			if ix.SchemaEnrichment {
+				enrichment = EnrichFromSchema(rec)
+			}
+			enriched.OriginalDescription = buildRefinementPrompt(rec, vagueness, enrichment)
+			if sum, serr := ix.Summary.Summarize(ctx, enriched); serr == nil && strings.TrimSpace(sum) != "" {
+				rec.GeneratedSummary = sum
+			}
+		}
+	}
 	RefreshSearchText(rec)
 
 	// Compute embedding text hash for cache invalidation.
@@ -414,4 +435,16 @@ func errorString(err error) string {
 		return ""
 	}
 	return err.Error()
+}
+
+func buildRefinementPrompt(rec *models.CapabilityRecord, vagueness VaguenessScore, enrichment string) string {
+	parts := []string{
+		fmt.Sprintf("Original description (VAGUE - %s): %s", strings.Join(vagueness.Reasons, ", "), rec.OriginalDescription),
+		fmt.Sprintf("Parameter names: %s", strings.Join(rec.Tags, ", ")),
+	}
+	if strings.TrimSpace(enrichment) != "" {
+		parts = append(parts, "Schema analysis suggests: "+enrichment)
+	}
+	parts = append(parts, "Write a precise, actionable description.")
+	return strings.Join(parts, "\n")
 }
