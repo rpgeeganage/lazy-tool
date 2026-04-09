@@ -1,9 +1,11 @@
 package runtime
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"lazy-tool/internal/app"
@@ -28,6 +30,7 @@ type Stack struct {
 	Summarizer summarizer.Summarizer
 	Embedder   embeddings.Embedder
 	Cache      *cache.Cache // nil when caching is disabled
+	telemetryStop func()
 }
 
 func OpenStack(cfgPath string) (*Stack, error) {
@@ -110,6 +113,7 @@ func OpenStack(cfgPath string) (*Stack, error) {
 		}
 		c = cache.New(maxEntries, ttl, cfg.Cache.ExcludeSources)
 	}
+	stopTelemetry := startTelemetryPurger(st, cfg)
 
 	return &Stack{
 		Cfg:        cfg,
@@ -121,6 +125,7 @@ func OpenStack(cfgPath string) (*Stack, error) {
 		Summarizer: sum,
 		Embedder:   emb,
 		Cache:      c,
+		telemetryStop: stopTelemetry,
 	}, nil
 }
 
@@ -130,6 +135,9 @@ func (s *Stack) Close() error {
 		if err := s.Factory.Close(); err != nil {
 			first = err
 		}
+	}
+	if s.telemetryStop != nil {
+		s.telemetryStop()
 	}
 	if s.Vec != nil {
 		if err := s.Vec.Close(); err != nil && first == nil {
@@ -142,4 +150,39 @@ func (s *Stack) Close() error {
 		}
 	}
 	return first
+}
+
+func startTelemetryPurger(st *storage.SQLiteStore, cfg *config.Config) func() {
+	if st == nil {
+		return nil
+	}
+	purgeCfg := storage.TelemetryPurgeConfig{
+		RetentionDays: cfg.Telemetry.RetentionDays,
+		MaxRows:       cfg.Telemetry.MaxRows,
+	}
+	if purgeCfg.RetentionDays <= 0 && purgeCfg.MaxRows <= 0 {
+		return nil
+	}
+	_, _ = st.PurgeOperationLog(context.Background(), purgeCfg)
+	if cfg.Telemetry.PurgeIntervalHours <= 0 {
+		return nil
+	}
+	interval := time.Duration(cfg.Telemetry.PurgeIntervalHours) * time.Hour
+	ctx, cancel := context.WithCancel(context.Background())
+	var once sync.Once
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				_, _ = st.PurgeOperationLog(context.Background(), purgeCfg)
+			}
+		}
+	}()
+	return func() {
+		once.Do(cancel)
+	}
 }

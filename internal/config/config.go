@@ -49,6 +49,11 @@ type Config struct {
 		TTLSeconds     int      `yaml:"ttl_seconds"`
 		ExcludeSources []string `yaml:"exclude_sources"`
 	} `yaml:"cache"`
+	Telemetry struct {
+		RetentionDays     int `yaml:"retention_days"`
+		PurgeIntervalHours int `yaml:"purge_interval_hours"`
+		MaxRows           int `yaml:"max_rows"`
+	} `yaml:"telemetry"`
 	Sources []SourceYAML `yaml:"sources"`
 	// Connectors controls upstream MCP client behavior (HTTP session reuse, etc.).
 	Connectors struct {

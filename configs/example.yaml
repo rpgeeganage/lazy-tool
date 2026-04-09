@@ -51,6 +51,11 @@ embeddings:
 #     user_summary: 0.25         # small boost when user edited summary (inspect override)
 #     favorite: 0.2              # boost for `lazy-tool pin add` capabilities
 
+telemetry:
+  retention_days: 30
+  purge_interval_hours: 6
+  max_rows: 100000
+
 sources:
   - id: local-gateway
     type: gateway
