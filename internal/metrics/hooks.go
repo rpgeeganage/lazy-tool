@@ -7,8 +7,17 @@ var ConnectorRetry = func(sourceID string, attempt int, err error) {}
 // ReindexSourceDone records completion of one source during reindex.
 var ReindexSourceDone = func(sourceID string, toolCount int, staleRemoved int, err error) {}
 
+// ReindexSourceDuration records one source reindex duration in milliseconds.
+var ReindexSourceDuration = func(sourceID string, durationMS int64, err error) {}
+
 // SearchExecuted records a completed search (result count after ranking cap).
 var SearchExecuted = func(resultCount int) {}
+
+// SearchDuration records end-to-end search latency and the candidate path chosen.
+var SearchDuration = func(durationMS int64, candidatePath string, resultCount int, err error) {}
+
+// VectorQueryDuration records the chromem vector leg latency.
+var VectorQueryDuration = func(durationMS int64, sourceID string, limit int, err error) {}
 
 // SearchCandidateGeneration records how candidates were gathered (Candidate B / part-3 search discipline).
 // Mode values match pkg/models SearchCandidatePath* constants (including full_catalog_substring_disabled).
@@ -40,3 +49,9 @@ var CircuitBreakerReset = func(sourceID string) {}
 
 // PassthroughFallbackActivated is called when passthrough fallback returns results (zero search results triggered it).
 var PassthroughFallbackActivated = func(resultCount int) {}
+
+// EmbeddingBatchDuration records embedding generation latency for one batch.
+var EmbeddingBatchDuration = func(sourceID string, batchSize int, durationMS int64, fallback bool, err error) {}
+
+// ProxyInvokeDuration records upstream proxy latency and cache outcome.
+var ProxyInvokeDuration = func(sourceID, proxyName string, durationMS int64, cached bool, err error) {}

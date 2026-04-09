@@ -8,12 +8,14 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"lazy-tool/internal/cache"
 	"lazy-tool/internal/connectors"
 	"lazy-tool/internal/metrics"
 	"lazy-tool/internal/runtime"
+	"lazy-tool/internal/storage"
 	"lazy-tool/internal/tracing"
 	"lazy-tool/pkg/models"
 )
@@ -120,6 +122,23 @@ func isCacheable(rec models.CapabilityRecord) bool {
 
 // ExecuteProxy routes a proxy tool name to the correct upstream MCP server and returns the raw result.
 func ExecuteProxy(ctx context.Context, stack *runtime.Stack, log *slog.Logger, proxyName string, input map[string]any) (*mcp.CallToolResult, []byte, error) {
+	started := time.Now()
+	record := func(sourceID string, cached bool, err error) {
+		durationMS := time.Since(started).Milliseconds()
+		metrics.ProxyInvokeDuration(sourceID, proxyName, durationMS, cached, err)
+		if stack != nil && stack.Store != nil {
+			_ = stack.Store.RecordOperation(ctx, storage.OperationLogEvent{
+				Operation:  "proxy_invoke",
+				SourceID:   sourceID,
+				DurationMS: durationMS,
+				Metadata: map[string]any{
+					"proxy_tool_name": proxyName,
+					"cached":          cached,
+				},
+				Error: errorString(err),
+			})
+		}
+	}
 	if input == nil {
 		input = map[string]any{}
 	}
@@ -128,6 +147,7 @@ func ExecuteProxy(ctx context.Context, stack *runtime.Stack, log *slog.Logger, p
 	rec, err := getCapabilityByCanonicalName(ctx, stack, proxyName)
 	if err != nil {
 		tracing.LogInvocation(ctx, log, proxyName, "", "", err)
+		record("", false, err)
 		return nil, nil, err
 	}
 
@@ -140,6 +160,7 @@ func ExecuteProxy(ctx context.Context, stack *runtime.Stack, log *slog.Logger, p
 			var res mcp.CallToolResult
 			if err := json.Unmarshal(raw, &res); err == nil {
 				log.Info("cache_hit", "proxy", proxyName)
+				record(rec.SourceID, true, nil)
 				return &res, raw, nil
 			}
 		}
@@ -147,6 +168,7 @@ func ExecuteProxy(ctx context.Context, stack *runtime.Stack, log *slog.Logger, p
 
 	pr, err := withProxyConn(ctx, stack, log, proxyName, models.CapabilityKindTool, "invoke_proxy_tool only supports tools")
 	if err != nil {
+		record(rec.SourceID, false, err)
 		return nil, nil, err
 	}
 	defer func() { _ = pr.conn.Close() }()
@@ -154,6 +176,7 @@ func ExecuteProxy(ctx context.Context, stack *runtime.Stack, log *slog.Logger, p
 	res, err := pr.conn.CallTool(ctx, pr.rec.OriginalName, input)
 	recordCircuitAndTrace(pr, log, ctx, proxyName, err, "")
 	if err != nil {
+		record(pr.rec.SourceID, false, err)
 		return nil, nil, err
 	}
 	raw, _ := json.Marshal(res)
@@ -162,6 +185,7 @@ func ExecuteProxy(ctx context.Context, stack *runtime.Stack, log *slog.Logger, p
 	if c := stack.Cache; c != nil && cacheKey != "" && cacheable && !c.IsSourceExcluded(pr.rec.SourceID) {
 		c.Put(cacheKey, raw)
 	}
+	record(pr.rec.SourceID, false, nil)
 
 	return res, raw, nil
 }
@@ -246,4 +270,11 @@ func ExecuteReadResource(ctx context.Context, stack *runtime.Stack, log *slog.Lo
 		return res, nil, err
 	}
 	return res, raw, nil
+}
+
+func errorString(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }

@@ -6,6 +6,7 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"time"
 
 	"lazy-tool/internal/embeddings"
 	"lazy-tool/internal/metrics"
@@ -55,6 +56,24 @@ func sourceAllowed(sourceID string, filter []string) bool {
 }
 
 func (s *Service) Search(ctx context.Context, q models.SearchQuery) (models.RankedResults, error) {
+	started := time.Now()
+	finalize := func(out models.RankedResults, err error) (models.RankedResults, error) {
+		durationMS := time.Since(started).Milliseconds()
+		metrics.SearchDuration(durationMS, out.CandidatePath, len(out.Results), err)
+		if s.Store != nil {
+			_ = s.Store.RecordOperation(ctx, storage.OperationLogEvent{
+				Operation:  "search",
+				DurationMS: durationMS,
+				Metadata: map[string]any{
+					"query":          q.Text,
+					"candidate_path": out.CandidatePath,
+					"result_count":   len(out.Results),
+				},
+				Error: errorString(err),
+			})
+		}
+		return out, err
+	}
 	tokens := tokenize(q.Text)
 	needle := strings.ToLower(strings.TrimSpace(q.Text))
 
@@ -77,10 +96,10 @@ func (s *Service) Search(ctx context.Context, q models.SearchQuery) (models.Rank
 		if len(q.SourceIDs) == 1 {
 			filterID = q.SourceIDs[0]
 		}
-		res, err := VectorQuery(ctx, s.Vec, qEmb, n, filterID)
+		res, err := VectorQuery(ctx, s.Store, s.Vec, qEmb, n, filterID)
 		if err != nil {
 			if errors.Is(err, vector.ErrClosed) {
-				return models.RankedResults{}, err
+				return finalize(models.RankedResults{}, err)
 			}
 			// Other chromem/query failures: omit vector leg (legacy lenient behavior).
 		} else {
@@ -92,21 +111,22 @@ func (s *Service) Search(ctx context.Context, q models.SearchQuery) (models.Rank
 
 	// Empty query: same behavior as legacy — scan full catalog; only vector (and token-less lexical) score.
 	if needle == "" {
-		return s.searchEmptyQuery(ctx, q, tokens, vecHits, wt)
+		out, err := s.searchEmptyQuery(ctx, q, tokens, vecHits, wt)
+		return finalize(out, err)
 	}
 
 	candidateIDs, candidatePath, err := s.buildCandidates(ctx, q, needle, vecHits)
 	if err != nil {
-		return models.RankedResults{}, err
+		return finalize(models.RankedResults{}, err)
 	}
 	if len(candidateIDs) == 0 {
 		metrics.SearchExecuted(0)
-		return models.RankedResults{CandidatePath: candidatePath}, nil
+		return finalize(models.RankedResults{CandidatePath: candidatePath}, nil)
 	}
 
 	byID, err := s.Store.GetCapabilitiesByIDs(ctx, candidateIDs)
 	if err != nil {
-		return models.RankedResults{}, err
+		return finalize(models.RankedResults{}, err)
 	}
 
 	// Load invocation stats for relevance feedback if boost is configured
@@ -144,7 +164,8 @@ func (s *Service) Search(ctx context.Context, q models.SearchQuery) (models.Rank
 			results = append(results, sr)
 		}
 	}
-	return s.rankAndFinalize(ctx, q, results, candidatePath)
+	out, err := s.rankAndFinalize(ctx, q, results, candidatePath)
+	return finalize(out, err)
 }
 
 func userSummaryWeight(wt ScoreWeights, r *models.CapabilityRecord) (float64, []string) {
