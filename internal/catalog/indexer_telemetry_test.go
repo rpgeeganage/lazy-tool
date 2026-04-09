@@ -114,6 +114,7 @@ func TestIndexerRecordsEmbedAndReindexTelemetry(t *testing.T) {
 		}}},
 		Summary: summarizer.Noop{},
 		Embed:   stubEmbedder{},
+		EmbeddingTextStrategy: "auto",
 		Store:   st,
 		Log:     slog.Default(),
 	}

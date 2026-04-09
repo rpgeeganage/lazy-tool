@@ -32,6 +32,7 @@ func newReindexCmd() *cobra.Command {
 				Factory:  stack.Factory,
 				Summary:  stack.Summarizer,
 				Embed:    stack.Embedder,
+				EmbeddingTextStrategy: stack.Cfg.Embeddings.TextStrategy,
 				Store:    stack.Store,
 				Vec:      stack.Vec,
 				Log:      slog.Default(),

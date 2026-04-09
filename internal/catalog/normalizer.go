@@ -81,6 +81,7 @@ func NormalizeTool(src models.Source, meta connectors.ToolMeta, now time.Time) m
 		rec.InputSchemaJSON = "{}"
 	}
 	rec.Tags = SchemaArgNames(rec.InputSchemaJSON)
+	rec.Tags = append(rec.Tags, SchemaSignals(rec.InputSchemaJSON)...)
 	RefreshSearchText(&rec)
 	return rec
 }
@@ -118,18 +119,12 @@ func RefreshSearchText(rec *models.CapabilityRecord) {
 // If the effective summary contains a "[keywords: ...]" suffix, those keywords are
 // extracted and appended separately.
 func BuildEmbeddingText(rec *models.CapabilityRecord) string {
-	_, keywords := splitSummaryKeywords(rec.EffectiveSummary())
+	return BuildEmbeddingTextWithStrategy(rec, "original_first")
+}
 
-	// Primary: use the rich upstream description for semantic breadth.
-	desc := strings.TrimSpace(rec.OriginalDescription)
-	if desc == "" {
-		// Fallback: no upstream description, use curated summary.
-		summary, kw := splitSummaryKeywords(rec.EffectiveSummary())
-		desc = summary
-		if keywords == "" {
-			keywords = kw
-		}
-	}
+func BuildEmbeddingTextWithStrategy(rec *models.CapabilityRecord, strategy string) string {
+	_, keywords := splitSummaryKeywords(rec.EffectiveSummary())
+	desc := embeddingPrimaryText(rec, strategy, &keywords)
 
 	var b strings.Builder
 	b.WriteString(string(rec.Kind))
@@ -149,6 +144,45 @@ func BuildEmbeddingText(rec *models.CapabilityRecord) string {
 	}
 
 	return b.String()
+}
+
+func embeddingPrimaryText(rec *models.CapabilityRecord, strategy string, keywords *string) string {
+	original := strings.TrimSpace(rec.OriginalDescription)
+	summary, kw := splitSummaryKeywords(rec.EffectiveSummary())
+	if *keywords == "" {
+		*keywords = kw
+	}
+	switch strings.ToLower(strings.TrimSpace(strategy)) {
+	case "summary_first":
+		if summary != "" {
+			return summary
+		}
+		return original
+	case "combined":
+		parts := []string{}
+		if original != "" {
+			parts = append(parts, original)
+		}
+		if summary != "" && !strings.EqualFold(summary, original) {
+			parts = append(parts, summary)
+		}
+		return strings.Join(parts, ". ")
+	case "auto":
+		if ScoreVagueness(rec).Score >= 0.5 && summary != "" {
+			return summary
+		}
+		fallthrough
+	case "original_first":
+		if original != "" {
+			return original
+		}
+		return summary
+	default:
+		if original != "" {
+			return original
+		}
+		return summary
+	}
 }
 
 // ComputeEmbeddingTextHash returns a hex-encoded SHA-256 of the embedding text.
@@ -235,6 +269,7 @@ func NormalizePrompt(src models.Source, meta connectors.PromptMeta, now time.Tim
 		MetadataJSON:        "{}",
 	}
 	rec.Tags = SchemaArgNames(rec.InputSchemaJSON)
+	rec.Tags = append(rec.Tags, SchemaSignals(rec.InputSchemaJSON)...)
 	RefreshSearchText(&rec)
 	return rec
 }

@@ -3,6 +3,7 @@ package catalog
 import (
 	"encoding/json"
 	"sort"
+	"strings"
 )
 
 // SchemaArgNames returns distinct JSON Schema property keys (recursive, shallow + nested objects).
@@ -19,6 +20,37 @@ func SchemaArgNames(schemaJSON string) []string {
 	out := make([]string, 0, len(seen))
 	for k := range seen {
 		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func SchemaSignals(schemaJSON string) []string {
+	args := SchemaArgNames(schemaJSON)
+	seen := map[string]struct{}{}
+	for _, arg := range args {
+		low := strings.ToLower(arg)
+		switch {
+		case strings.Contains(low, "query") || strings.Contains(low, "search") || strings.Contains(low, "filter"):
+			seen["searches"] = struct{}{}
+		case strings.Contains(low, "url") || strings.Contains(low, "uri"):
+			seen["fetches"] = struct{}{}
+		case strings.Contains(low, "content"):
+			seen["content"] = struct{}{}
+		case strings.Contains(low, "path"):
+			seen["path"] = struct{}{}
+		case strings.HasSuffix(low, "id") || low == "id":
+			seen["reads"] = struct{}{}
+		}
+	}
+	if _, hasPath := seen["path"]; hasPath {
+		if _, hasContent := seen["content"]; hasContent {
+			seen["writes"] = struct{}{}
+		}
+	}
+	out := make([]string, 0, len(seen))
+	for v := range seen {
+		out = append(out, v)
 	}
 	sort.Strings(out)
 	return out
