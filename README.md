@@ -297,6 +297,7 @@ lazy-tool-x import --write --output my-config.yaml
 ```
 
 Supported config file locations:
+
 - **Claude Desktop**: `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS), `%APPDATA%\Claude\claude_desktop_config.json` (Windows)
 - **Cursor**: `~/.cursor/mcp.json`
 - **VS Code**: `~/.vscode/mcp.json`
@@ -387,18 +388,44 @@ embeddings:
   provider: ollama                     # noop | ollama | openai-compatible
   model: nomic-embed-text
   base_url: http://127.0.0.1:11434
+  text_strategy: auto                  # auto | original_first | summary_first | combined
+  retry_attempts: 2
+  retry_backoff_ms: 1000
 ```
 
 ### Summarization (optional LLM descriptions)
 
 ```yaml
 summary:
-  provider: openai-compatible
+  provider: openai-compatible          # openai-compatible | exec | noop
   model: gpt-4.1-mini
   enabled: true
   base_url: https://api.openai.com/v1
   api_key_env: OPENAI_API_KEY
+
+  # exec provider
+  command: opencode
+  args: ["--pure", "run", "-m", "gpt-5.4-mini"]
+  timeout_seconds: 120
+
+  # auto-refine vague upstream descriptions during reindex
+  auto_refine: true
+  vagueness_threshold: 0.5
+  schema_enrichment: true
 ```
+
+`summary.provider: exec` runs an external command with the summarization prompt on stdin and reads the one-sentence summary from stdout.
+
+### Telemetry and local observability
+
+```yaml
+telemetry:
+  retention_days: 30
+  purge_interval_hours: 6
+  max_rows: 100000
+```
+
+Telemetry is stored in the same SQLite database as the catalog. `lazy-tool-x` records search, reindex, embedding, vector-query, and proxy-invocation timings plus cache outcomes and upstream error classes.
 
 ### Server
 
@@ -485,7 +512,7 @@ Sources with `fallback: passthrough` return their full catalog when search retur
 
 ## Response cache
 
-When enabled, `lazy-tool-x` caches upstream responses in memory (LRU + TTL). Keyed by SHA-256 of tool name + input arguments. Per-source exclusion for mutation-heavy tools. Cache hits visible in trace logs and web UI.
+When enabled, `lazy-tool-x` caches upstream responses in memory (LRU + TTL). Keyed by SHA-256 of tool name + input arguments. Per-source exclusion for mutation-heavy tools. Cache hits are visible in trace logs and in `/stats` and `/cache/stats`.
 
 ```bash
 lazy-tool-x cache-clear
@@ -496,9 +523,40 @@ lazy-tool-x cache-clear
 ## Web UI and TUI
 
 ```bash
-./bin/lazy-tool-x web --addr 127.0.0.1:8765   # browser UI: search, inspect, traces
+./bin/lazy-tool-x web --addr 127.0.0.1:8765   # browser UI: search, inspect, traces, stats
 ./bin/lazy-tool-x tui                           # terminal UI: bubbletea-based
 ```
+
+Useful local observability endpoints:
+
+```bash
+curl http://127.0.0.1:8765/stats
+curl http://127.0.0.1:8765/stats/search
+curl http://127.0.0.1:8765/stats/sources
+curl http://127.0.0.1:8765/cache/stats
+curl http://127.0.0.1:8765/traces
+```
+
+These endpoints expose aggregate latency, cache hit/miss rate, per-source health, and upstream error-class counts.
+
+## Reindex dry-run
+
+`lazy-tool-x reindex --dry-run` now shows both per-source totals and per-record change entries:
+
+```bash
+lazy-tool-x reindex --dry-run
+```
+
+Example output:
+
+```text
+src1                 new=1   updated=2   unchanged=10  stale=1   ok
+  NEW      tool      src1__newtool
+  UPDATED  tool      src1__existing
+  STALE    tool      src1__oldtool
+```
+
+This only affects reporting. The normal `reindex` write path is unchanged.
 
 ---
 
