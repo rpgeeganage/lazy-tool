@@ -53,6 +53,9 @@ func newReindexCmd() *cobra.Command {
 					}
 					fmt.Printf("  %-20s  new=%-3d  updated=%-3d  unchanged=%-3d  stale=%-3d  %s\n",
 						sr.SourceID, sr.New, sr.Updated, sr.Unchanged, sr.Stale, status)
+					for _, change := range sr.Changes {
+						fmt.Printf("    %-7s  %-8s  %s\n", change.Status, change.Kind, change.CanonicalName)
+					}
 					totalNew += sr.New
 					totalUpdated += sr.Updated
 					totalUnchanged += sr.Unchanged
