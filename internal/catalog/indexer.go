@@ -137,7 +137,14 @@ type DryRunSourceResult struct {
 	Updated   int
 	Unchanged int
 	Stale     int
+	Changes   []DryRunChange
 	Error     error
+}
+
+type DryRunChange struct {
+	Status        string
+	CanonicalName string
+	Kind          models.CapabilityKind
 }
 
 // DryRun connects to all sources and computes what a reindex would change, without writing to the database.
@@ -177,10 +184,13 @@ func (ix *Indexer) dryRunSource(ctx context.Context, src models.Source) DryRunSo
 		old, gerr := ix.Store.GetCapability(ctx, rec.ID)
 		if errors.Is(gerr, sql.ErrNoRows) {
 			sr.New++
+			sr.Changes = append(sr.Changes, DryRunChange{Status: "NEW", CanonicalName: rec.CanonicalName, Kind: rec.Kind})
 		} else if gerr != nil {
 			sr.New++ // assume new on error
+			sr.Changes = append(sr.Changes, DryRunChange{Status: "NEW", CanonicalName: rec.CanonicalName, Kind: rec.Kind})
 		} else if old.VersionHash != rec.VersionHash {
 			sr.Updated++
+			sr.Changes = append(sr.Changes, DryRunChange{Status: "UPDATED", CanonicalName: rec.CanonicalName, Kind: rec.Kind})
 		} else {
 			sr.Unchanged++
 		}
@@ -211,9 +221,16 @@ func (ix *Indexer) dryRunSource(ctx context.Context, src models.Source) DryRunSo
 		for _, rec := range existing {
 			if _, ok := seen[rec.ID]; !ok {
 				sr.Stale++
+				sr.Changes = append(sr.Changes, DryRunChange{Status: "STALE", CanonicalName: rec.CanonicalName, Kind: rec.Kind})
 			}
 		}
 	}
+	sort.Slice(sr.Changes, func(i, j int) bool {
+		if sr.Changes[i].Status == sr.Changes[j].Status {
+			return sr.Changes[i].CanonicalName < sr.Changes[j].CanonicalName
+		}
+		return sr.Changes[i].Status < sr.Changes[j].Status
+	})
 
 	return sr
 }
