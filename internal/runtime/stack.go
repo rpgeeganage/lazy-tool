@@ -86,6 +86,7 @@ func OpenStack(cfgPath string) (*Stack, error) {
 			OpenDuration: cbCooldown,
 		},
 	})
+	seedCircuitBreakers(st, reg, fact)
 	sum := summarizer.New(cfg)
 	emb := embeddings.New(cfg)
 	svc := search.NewService(st, vi, emb, search.ScoreWeights{
@@ -127,6 +128,38 @@ func OpenStack(cfgPath string) (*Stack, error) {
 		Cache:      c,
 		telemetryStop: stopTelemetry,
 	}, nil
+}
+
+func seedCircuitBreakers(st *storage.SQLiteStore, reg *app.SourceRegistry, fact connectors.Factory) {
+	if st == nil || reg == nil || fact == nil {
+		return
+	}
+	rows, err := st.ListSourceHealth(context.Background())
+	if err != nil {
+		return
+	}
+	for _, row := range rows {
+		if _, ok := reg.Get(row.SourceID); !ok {
+			continue
+		}
+		state := parseCircuitState(row.CircuitState)
+		lastFailed := time.Time{}
+		if row.CircuitLastFailedAt != nil {
+			lastFailed = row.CircuitLastFailedAt.UTC()
+		}
+		fact.SeedCircuitBreaker(row.SourceID, state, row.CircuitFailures, lastFailed)
+	}
+}
+
+func parseCircuitState(v string) connectors.CircuitState {
+	switch v {
+	case connectors.CircuitOpen.String():
+		return connectors.CircuitOpen
+	case connectors.CircuitHalfOpen.String():
+		return connectors.CircuitHalfOpen
+	default:
+		return connectors.CircuitClosed
+	}
 }
 
 func (s *Stack) Close() error {

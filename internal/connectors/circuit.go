@@ -45,6 +45,12 @@ type CircuitBreaker struct {
 	lastFailedAt time.Time
 }
 
+type CircuitSnapshot struct {
+	State        CircuitState
+	Failures     int
+	LastFailedAt time.Time
+}
+
 // NewCircuitBreaker creates a circuit breaker. If opts.MaxFailures is 0, the breaker is effectively disabled.
 func NewCircuitBreaker(opts CircuitBreakerOpts) *CircuitBreaker {
 	if opts.OpenDuration <= 0 {
@@ -98,6 +104,29 @@ func (cb *CircuitBreaker) RecordFailure() {
 	cb.lastFailedAt = time.Now()
 	if cb.failures >= cb.opts.MaxFailures {
 		cb.state = CircuitOpen
+	}
+}
+
+func (cb *CircuitBreaker) Snapshot() CircuitSnapshot {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+	if cb.state == CircuitOpen && time.Since(cb.lastFailedAt) >= cb.opts.OpenDuration {
+		cb.state = CircuitHalfOpen
+	}
+	return CircuitSnapshot{State: cb.state, Failures: cb.failures, LastFailedAt: cb.lastFailedAt}
+}
+
+func (cb *CircuitBreaker) Seed(state CircuitState, failures int, lastFailedAt time.Time) {
+	if cb.opts.MaxFailures <= 0 {
+		return
+	}
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+	cb.state = state
+	cb.failures = failures
+	cb.lastFailedAt = lastFailedAt
+	if cb.state == CircuitOpen && time.Since(cb.lastFailedAt) >= cb.opts.OpenDuration {
+		cb.state = CircuitHalfOpen
 	}
 }
 

@@ -85,6 +85,14 @@ func (f *factoryImpl) CircuitBreakerFor(sourceID string) *CircuitBreaker {
 	return cb
 }
 
+func (f *factoryImpl) SeedCircuitBreaker(sourceID string, state CircuitState, failures int, lastFailedAt time.Time) {
+	cb := f.CircuitBreakerFor(sourceID)
+	if cb == nil {
+		return
+	}
+	cb.Seed(state, failures, lastFailedAt)
+}
+
 func (f *factoryImpl) Close() error {
 	f.holdersMu.Lock()
 	defer f.holdersMu.Unlock()
