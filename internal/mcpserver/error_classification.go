@@ -3,7 +3,6 @@ package mcpserver
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net"
 	"strings"
 )
@@ -71,15 +70,4 @@ func mergeMetadata(base map[string]any, extra map[string]any) map[string]any {
 		out[k] = v
 	}
 	return out
-}
-
-func wrapClassifiedError(err error) error {
-	if err == nil {
-		return nil
-	}
-	class := classifyError(err)
-	if class == ErrClassNone || class == ErrClassUnknown {
-		return err
-	}
-	return fmt.Errorf("%s: %w", class, err)
 }
