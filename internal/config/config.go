@@ -36,6 +36,12 @@ type Config struct {
 		Enabled   bool   `yaml:"enabled"`
 		BaseURL   string `yaml:"base_url"`
 		APIKeyEnv string `yaml:"api_key_env"`
+		Command   string   `yaml:"command"`
+		Args      []string `yaml:"args"`
+		TimeoutSeconds int `yaml:"timeout_seconds"`
+		AutoRefine bool `yaml:"auto_refine"`
+		VaguenessThreshold float64 `yaml:"vagueness_threshold"`
+		SchemaEnrichment bool `yaml:"schema_enrichment"`
 	} `yaml:"summary"`
 	Embeddings struct {
 		Provider  string `yaml:"provider"`

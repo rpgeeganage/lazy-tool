@@ -22,6 +22,12 @@ summary:
   enabled: false
   base_url: https://api.openai.com/v1
   api_key_env: OPENAI_API_KEY
+  command: ""
+  args: []
+  timeout_seconds: 120
+  auto_refine: false
+  vagueness_threshold: 0.5
+  schema_enrichment: true
 
 embeddings:
   provider: noop
