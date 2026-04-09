@@ -30,4 +30,16 @@ CREATE TABLE IF NOT EXISTS invocation_stats (
 	success_count  INTEGER NOT NULL DEFAULT 0,
 	last_invoked_at INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS operation_log (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	operation TEXT NOT NULL,
+	source_id TEXT,
+	duration_ms INTEGER NOT NULL DEFAULT 0,
+	metadata_json TEXT NOT NULL DEFAULT '{}',
+	error TEXT NOT NULL DEFAULT '',
+	created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_operation_log_created_at ON operation_log(created_at);
+CREATE INDEX IF NOT EXISTS idx_operation_log_operation_created_at ON operation_log(operation, created_at);
+CREATE INDEX IF NOT EXISTS idx_operation_log_source_created_at ON operation_log(source_id, created_at);
 `
