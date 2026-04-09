@@ -92,12 +92,12 @@ func TestBuildEmbeddingText_basic(t *testing.T) {
 		Tags:                []string{"query", "top_k"},
 	}
 	text := BuildEmbeddingText(&rec)
-	// Should contain kind, name, summary (first sentence), and parameters.
+	// Should contain kind, name, and full OriginalDescription (not summary).
 	if !strings.Contains(text, "tool search_docs:") {
 		t.Errorf("missing kind+name prefix: %q", text)
 	}
-	if !strings.Contains(text, "Searches Microsoft documentation") {
-		t.Errorf("missing summary: %q", text)
+	if !strings.Contains(text, "Search documentation. Returns matching pages.") {
+		t.Errorf("should use OriginalDescription: %q", text)
 	}
 	if !strings.Contains(text, "Parameters: query, top_k") {
 		t.Errorf("missing parameters: %q", text)
@@ -110,20 +110,39 @@ func TestBuildEmbeddingText_basic(t *testing.T) {
 
 func TestBuildEmbeddingText_userSummaryWithKeywords(t *testing.T) {
 	rec := models.CapabilityRecord{
-		Kind:             models.CapabilityKindTool,
-		OriginalName:     "search_docs",
-		GeneratedSummary: "Generated summary.",
-		UserSummary:      "Searches Microsoft Learn docs for Azure services. [keywords: azure, firewall, nsg, docs]",
-		Tags:             []string{"query"},
+		Kind:                models.CapabilityKindTool,
+		OriginalName:        "search_docs",
+		OriginalDescription: "Search official Microsoft documentation for any topic.",
+		GeneratedSummary:    "Generated summary.",
+		UserSummary:         "Searches Microsoft Learn docs for Azure services. [keywords: azure, firewall, nsg, docs]",
+		Tags:                []string{"query"},
 	}
 	text := BuildEmbeddingText(&rec)
-	// Should use UserSummary (first sentence) over GeneratedSummary.
-	if !strings.Contains(text, "Searches Microsoft Learn docs for Azure services.") {
-		t.Errorf("should use user summary first sentence: %q", text)
+	// Should use OriginalDescription as primary embedding text, NOT UserSummary sentence.
+	if !strings.Contains(text, "Search official Microsoft documentation for any topic.") {
+		t.Errorf("should use OriginalDescription: %q", text)
 	}
-	// Keywords should be extracted and appended.
+	// Keywords from UserSummary should still be extracted and appended.
 	if !strings.Contains(text, "Keywords: azure, firewall, nsg, docs") {
 		t.Errorf("missing keywords section: %q", text)
+	}
+}
+
+func TestBuildEmbeddingText_noDescription_fallsBackToSummary(t *testing.T) {
+	rec := models.CapabilityRecord{
+		Kind:            models.CapabilityKindTool,
+		OriginalName:    "search_docs",
+		GeneratedSummary: "Generated summary with details.",
+		UserSummary:     "Curated summary. [keywords: azure, docs]",
+		Tags:            []string{"query"},
+	}
+	text := BuildEmbeddingText(&rec)
+	// No OriginalDescription → should fall back to EffectiveSummary body.
+	if !strings.Contains(text, "Curated summary.") {
+		t.Errorf("should fall back to user summary body: %q", text)
+	}
+	if !strings.Contains(text, "Keywords: azure, docs") {
+		t.Errorf("missing keywords: %q", text)
 	}
 }
 
