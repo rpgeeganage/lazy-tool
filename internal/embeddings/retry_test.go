@@ -26,7 +26,6 @@ func (f *flakyEmbedder) Embed(ctx context.Context, texts []string) ([][]float32,
 func (f *flakyEmbedder) ModelName() string { return "flaky" }
 
 func TestRetryingEmbedder_RetriesAndSucceeds(t *testing.T) {
-	t.Parallel()
 	flaky := &flakyEmbedder{fails: 2}
 	var retries []int
 	prev := metrics.ConnectorRetry
@@ -55,7 +54,6 @@ func TestRetryingEmbedder_RetriesAndSucceeds(t *testing.T) {
 }
 
 func TestRetryingEmbedder_ReturnsLastError(t *testing.T) {
-	t.Parallel()
 	flaky := &flakyEmbedder{fails: 5}
 	r := retryingEmbedder{next: flaky, attempts: 2, backoff: time.Millisecond, sourceID: "embeddings"}
 	_, err := r.Embed(context.Background(), []string{"hello"})
