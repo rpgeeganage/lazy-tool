@@ -28,6 +28,8 @@ embeddings:
   model: ""
   base_url: http://127.0.0.1:11434
   api_key_env: ""
+  retry_attempts: 2
+  retry_backoff_ms: 1000
 
 # connectors:
 #   http_reuse_upstream_session: false   # when true, HTTP MCP sources reuse one session until idle TTL, error, or process exit (stdio still one process per call)

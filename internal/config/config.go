@@ -42,6 +42,8 @@ type Config struct {
 		Model     string `yaml:"model"`
 		BaseURL   string `yaml:"base_url"`
 		APIKeyEnv string `yaml:"api_key_env"`
+		RetryAttempts int `yaml:"retry_attempts"`
+		RetryBackoffMS int `yaml:"retry_backoff_ms"`
 	} `yaml:"embeddings"`
 	Cache struct {
 		Enabled        bool     `yaml:"enabled"`

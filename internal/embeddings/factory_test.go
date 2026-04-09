@@ -61,3 +61,14 @@ func TestNew_delegatesToFromConfig(t *testing.T) {
 		t.Fatal("expected Noop embedder")
 	}
 }
+
+func TestFromConfig_wrapsRetryingEmbedder(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Embeddings.Provider = "ollama"
+	cfg.Embeddings.RetryAttempts = 2
+	cfg.Embeddings.RetryBackoffMS = 10
+	e := FromConfig(cfg)
+	if _, ok := e.(retryingEmbedder); !ok {
+		t.Fatalf("expected retryingEmbedder, got %T", e)
+	}
+}
