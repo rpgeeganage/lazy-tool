@@ -55,6 +55,18 @@ func TestSearch_candidatePath_substringMatrix(t *testing.T) {
 				VersionHash: "1", LastSeenAt: time.Now(), InputSchemaJSON: "{}", MetadataJSON: "{}",
 			},
 		},
+		{
+			name:  "conversational_query_uses_zero_row_fallback",
+			query: "create a new Word document populated with a summary of this conversation",
+			want:  models.SearchCandidatePathSubstringFullCatalogFTSZeroRows,
+			fixture: models.CapabilityRecord{
+				ID: "4", Kind: models.CapabilityKindTool, SourceID: "office", SourceType: "server",
+				CanonicalName: "office__word_from_markdown", OriginalName: "word_from_markdown",
+				GeneratedSummary: "Creates a new Word document populated from Markdown summary, conversation summary, notes, or report content.",
+				SearchText:       "office word_from_markdown creates a new word document populated from markdown summary conversation summary notes report content",
+				VersionHash:      "1", LastSeenAt: time.Now(), InputSchemaJSON: "{}", MetadataJSON: "{}",
+			},
+		},
 	}
 
 	// When limit=1 and FTS returns 1 hit, substring scan is skipped (FTS has enough).
@@ -125,6 +137,11 @@ func TestSearch_candidatePath_substringMatrix(t *testing.T) {
 			ranked, err := svc.Search(ctx, models.SearchQuery{Text: tc.query, Limit: 5})
 			if err != nil {
 				t.Fatal(err)
+			}
+			if tc.name == "conversational_query_uses_zero_row_fallback" {
+				if len(ranked.Results) == 0 || ranked.Results[0].ProxyToolName != "office__word_from_markdown" {
+					t.Fatalf("expected office__word_from_markdown top hit, got %#v", ranked.Results)
+				}
 			}
 			if mode != tc.want {
 				t.Fatalf("metrics path: got %q want %q", mode, tc.want)

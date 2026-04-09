@@ -115,7 +115,7 @@ func (s *Service) Search(ctx context.Context, q models.SearchQuery) (models.Rank
 		return finalize(out, err)
 	}
 
-	candidateIDs, candidatePath, err := s.buildCandidates(ctx, q, needle, vecHits)
+	candidateIDs, candidatePath, err := s.buildCandidates(ctx, q, needle, tokens, vecHits)
 	if err != nil {
 		return finalize(models.RankedResults{}, err)
 	}
@@ -328,7 +328,7 @@ func (s *Service) searchEmptyQuery(ctx context.Context, q models.SearchQuery, to
 	return s.rankAndFinalize(ctx, q, results, candidatePath)
 }
 
-func (s *Service) buildCandidates(ctx context.Context, q models.SearchQuery, needle string, vecHits map[string]float32) ([]string, string, error) {
+func (s *Service) buildCandidates(ctx context.Context, q models.SearchQuery, needle string, tokens []string, vecHits map[string]float32) ([]string, string, error) {
 	seen := make(map[string]struct{})
 	var out []string
 	add := func(id string) {
@@ -423,6 +423,16 @@ func (s *Service) buildCandidates(ctx context.Context, q models.SearchQuery, nee
 	subIDs, err := s.Store.ListIDsBySearchTextSubstring(ctx, needle, q.SourceIDs)
 	if err != nil {
 		return nil, "", err
+	}
+	if len(subIDs) == 0 && len(ftsIDs) == 0 {
+		fallbackTokens := fallbackConjunctionTokens(tokens)
+		if len(fallbackTokens) > 0 {
+			tokenIDs, err := s.Store.ListIDsBySearchTextTokenConjunction(ctx, fallbackTokens, q.SourceIDs)
+			if err != nil {
+				return nil, "", err
+			}
+			subIDs = tokenIDs
+		}
 	}
 	for _, id := range subIDs {
 		add(id)

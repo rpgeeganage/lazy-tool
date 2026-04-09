@@ -345,6 +345,47 @@ func (s *SQLiteStore) ListIDsBySearchTextSubstring(ctx context.Context, needle s
 	return out, rows.Err()
 }
 
+// ListIDsBySearchTextTokenConjunction returns capability IDs whose search_text contains all
+// provided tokens as literal substrings. Tokens should already be normalized/lowercased.
+func (s *SQLiteStore) ListIDsBySearchTextTokenConjunction(ctx context.Context, tokens []string, sourceIDs []string) ([]string, error) {
+	if len(tokens) == 0 {
+		return nil, nil
+	}
+	clauses := make([]string, 0, len(tokens))
+	args := make([]any, 0, len(tokens)+len(sourceIDs))
+	for _, token := range tokens {
+		if strings.TrimSpace(token) == "" {
+			continue
+		}
+		clauses = append(clauses, `search_text LIKE ? ESCAPE '\'`)
+		args = append(args, likeSubstringPattern(token))
+	}
+	if len(clauses) == 0 {
+		return nil, nil
+	}
+	q := `SELECT id FROM capabilities WHERE ` + strings.Join(clauses, ` AND `)
+	if len(sourceIDs) > 0 {
+		ph := placeholders(len(sourceIDs))
+		q += ` AND source_id IN (` + ph + `)`
+		args = append(args, anySlice(sourceIDs)...)
+	}
+	q += ` ORDER BY source_id, canonical_name`
+	rows, err := s.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
 func (s *SQLiteStore) DeleteStale(ctx context.Context, sourceID string, keep map[string]struct{}) (int, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT id FROM capabilities WHERE source_id=?`, sourceID)
 	if err != nil {
