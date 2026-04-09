@@ -33,7 +33,7 @@ func FromConfig(c *config.Config) Embedder {
 	default:
 		out = Noop{}
 	}
-	if c.Embeddings.RetryAttempts > 0 && kind(out) != "noop" {
+	if c.Embeddings.RetryAttempts > 0 && !isNoopEmbedder(out) {
 		out = retryingEmbedder{
 			next:     out,
 			attempts: c.Embeddings.RetryAttempts,
@@ -42,4 +42,9 @@ func FromConfig(c *config.Config) Embedder {
 		}
 	}
 	return out
+}
+
+func isNoopEmbedder(e Embedder) bool {
+	_, ok := e.(Noop)
+	return ok
 }
