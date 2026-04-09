@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"time"
 )
 
@@ -30,6 +31,39 @@ type OperationLogEvent struct {
 type TelemetryPurgeConfig struct {
 	RetentionDays int
 	MaxRows       int
+}
+
+type OperationSummary struct {
+	Count         int64
+	ErrorCount    int64
+	AverageMS     float64
+	LatestAt      *time.Time
+	CacheHits     int64
+	CacheMisses   int64
+	ReindexCount  int64
+	SearchCount   int64
+	ProxyCount    int64
+	VectorCount   int64
+	EmbedCount    int64
+}
+
+type SearchTimelinePoint struct {
+	BucketStart time.Time
+	Count       int64
+	AverageMS   float64
+	Errors      int64
+}
+
+type SourceOperationStats struct {
+	SourceID     string
+	Count        int64
+	ErrorCount   int64
+	AverageMS    float64
+	LatestError  string
+	LatestAt     *time.Time
+	LastReindexOK *bool
+	LastReindexMessage string
+	LastReindexAt *time.Time
 }
 
 func (s *SQLiteStore) ensureOperationLog(ctx context.Context) error {
@@ -156,6 +190,172 @@ WHERE id IN (
 		}
 	}
 	return totalDeleted, nil
+}
+
+func (s *SQLiteStore) SummarizeOperations(ctx context.Context) (OperationSummary, error) {
+	if err := s.ensureOperationLog(ctx); err != nil {
+		return OperationSummary{}, err
+	}
+	var out OperationSummary
+	var avg sql.NullFloat64
+	var latest sql.NullInt64
+	err := s.db.QueryRowContext(ctx, `
+SELECT COUNT(*),
+	SUM(CASE WHEN error <> '' THEN 1 ELSE 0 END),
+	AVG(duration_ms),
+	MAX(created_at),
+	SUM(CASE WHEN operation = 'proxy_invoke' AND json_extract(metadata_json, '$.cached') = 1 THEN 1 ELSE 0 END),
+	SUM(CASE WHEN operation = 'proxy_invoke' AND json_extract(metadata_json, '$.cached') = 0 THEN 1 ELSE 0 END),
+	SUM(CASE WHEN operation = 'reindex' THEN 1 ELSE 0 END),
+	SUM(CASE WHEN operation = 'search' THEN 1 ELSE 0 END),
+	SUM(CASE WHEN operation = 'proxy_invoke' THEN 1 ELSE 0 END),
+	SUM(CASE WHEN operation = 'vector_query' THEN 1 ELSE 0 END),
+	SUM(CASE WHEN operation = 'embed' THEN 1 ELSE 0 END)
+FROM operation_log
+`).Scan(
+		&out.Count,
+		&out.ErrorCount,
+		&avg,
+		&latest,
+		&out.CacheHits,
+		&out.CacheMisses,
+		&out.ReindexCount,
+		&out.SearchCount,
+		&out.ProxyCount,
+		&out.VectorCount,
+		&out.EmbedCount,
+	)
+	if err != nil {
+		return OperationSummary{}, err
+	}
+	if avg.Valid {
+		out.AverageMS = avg.Float64
+	}
+	if latest.Valid {
+		ts := time.UnixMilli(latest.Int64).UTC()
+		out.LatestAt = &ts
+	}
+	return out, nil
+}
+
+func (s *SQLiteStore) SearchTimeline(ctx context.Context, bucketMinutes int, limit int) ([]SearchTimelinePoint, error) {
+	if err := s.ensureOperationLog(ctx); err != nil {
+		return nil, err
+	}
+	if bucketMinutes <= 0 {
+		bucketMinutes = 60
+	}
+	if limit <= 0 {
+		limit = 24
+	}
+	bucketMS := int64(bucketMinutes) * int64(time.Minute/time.Millisecond)
+	rows, err := s.db.QueryContext(ctx, `
+SELECT (created_at / ?) * ? AS bucket_start,
+	COUNT(*),
+	AVG(duration_ms),
+	SUM(CASE WHEN error <> '' THEN 1 ELSE 0 END)
+FROM operation_log
+WHERE operation = 'search'
+GROUP BY bucket_start
+ORDER BY bucket_start DESC
+LIMIT ?
+`, bucketMS, bucketMS, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []SearchTimelinePoint
+	for rows.Next() {
+		var p SearchTimelinePoint
+		var bucketStart int64
+		if err := rows.Scan(&bucketStart, &p.Count, &p.AverageMS, &p.Errors); err != nil {
+			return nil, err
+		}
+		p.BucketStart = time.UnixMilli(bucketStart).UTC()
+		out = append(out, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].BucketStart.Before(out[j].BucketStart) })
+	return out, nil
+}
+
+func (s *SQLiteStore) SourceOperationSummaries(ctx context.Context) ([]SourceOperationStats, error) {
+	if err := s.ensureOperationLog(ctx); err != nil {
+		return nil, err
+	}
+	rows, err := s.db.QueryContext(ctx, `
+SELECT source_id,
+	COUNT(*),
+	SUM(CASE WHEN error <> '' THEN 1 ELSE 0 END),
+	AVG(duration_ms),
+	MAX(created_at)
+FROM operation_log
+WHERE COALESCE(source_id, '') <> ''
+GROUP BY source_id
+ORDER BY source_id
+`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []SourceOperationStats
+	for rows.Next() {
+		var stat SourceOperationStats
+		var latest sql.NullInt64
+		if err := rows.Scan(&stat.SourceID, &stat.Count, &stat.ErrorCount, &stat.AverageMS, &latest); err != nil {
+			return nil, err
+		}
+		if latest.Valid {
+			ts := time.UnixMilli(latest.Int64).UTC()
+			stat.LatestAt = &ts
+		}
+		latestErr, latestErrAt, err := s.latestSourceError(ctx, stat.SourceID)
+		if err != nil {
+			return nil, err
+		}
+		stat.LatestError = latestErr
+		if latestErrAt != nil {
+			stat.LatestAt = latestErrAt
+		}
+		h, ok, err := s.GetSourceHealth(ctx, stat.SourceID)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			okCopy := h.OK
+			stat.LastReindexOK = &okCopy
+			stat.LastReindexMessage = h.Message
+			ts := h.UpdatedAt.UTC()
+			stat.LastReindexAt = &ts
+		}
+		out = append(out, stat)
+	}
+	return out, rows.Err()
+}
+
+func (s *SQLiteStore) latestSourceError(ctx context.Context, sourceID string) (string, *time.Time, error) {
+	var errText sql.NullString
+	var ts sql.NullInt64
+	err := s.db.QueryRowContext(ctx, `
+SELECT error, created_at
+FROM operation_log
+WHERE source_id = ? AND error <> ''
+ORDER BY id DESC
+LIMIT 1
+`, sourceID).Scan(&errText, &ts)
+	if err == sql.ErrNoRows {
+		return "", nil, nil
+	}
+	if err != nil {
+		return "", nil, err
+	}
+	if !ts.Valid {
+		return errText.String, nil, nil
+	}
+	tm := time.UnixMilli(ts.Int64).UTC()
+	return errText.String, &tm, nil
 }
 
 func nullIfEmpty(v string) any {
