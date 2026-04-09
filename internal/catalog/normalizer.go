@@ -104,17 +104,31 @@ func RefreshSearchText(rec *models.CapabilityRecord) {
 }
 
 // BuildEmbeddingText produces a clean, semantic-friendly string for vector embeddings.
-// The format is designed to maximise cosine-similarity relevance:
+// The format is designed to maximise cosine-similarity relevance while providing
+// complementary coverage to the FTS5 index (which uses SearchText built from
+// user_summary + metadata).
 //
-//	"{Kind} {OriginalName}: {summary sentence}. Parameters: {tags}. Keywords: {kw}"
+// Strategy: embed the full OriginalDescription (rich upstream content) so the vector
+// index captures semantic nuances that the curated user_summary may omit. The
+// user_summary keywords are still appended to anchor the embedding to discovery terms.
 //
-// When no summary is available, falls back to the original description.
+//	"{Kind} {OriginalName}: {description}. Parameters: {tags}. Keywords: {kw}"
+//
+// When no OriginalDescription is available, falls back to EffectiveSummary.
 // If the effective summary contains a "[keywords: ...]" suffix, those keywords are
 // extracted and appended separately.
 func BuildEmbeddingText(rec *models.CapabilityRecord) string {
-	summary, keywords := splitSummaryKeywords(rec.EffectiveSummary())
-	if summary == "" {
-		summary = rec.OriginalDescription
+	_, keywords := splitSummaryKeywords(rec.EffectiveSummary())
+
+	// Primary: use the rich upstream description for semantic breadth.
+	desc := strings.TrimSpace(rec.OriginalDescription)
+	if desc == "" {
+		// Fallback: no upstream description, use curated summary.
+		summary, kw := splitSummaryKeywords(rec.EffectiveSummary())
+		desc = summary
+		if keywords == "" {
+			keywords = kw
+		}
 	}
 
 	var b strings.Builder
@@ -122,7 +136,7 @@ func BuildEmbeddingText(rec *models.CapabilityRecord) string {
 	b.WriteByte(' ')
 	b.WriteString(rec.OriginalName)
 	b.WriteString(": ")
-	b.WriteString(firstSentence(summary))
+	b.WriteString(desc)
 
 	if len(rec.Tags) > 0 {
 		b.WriteString(". Parameters: ")
