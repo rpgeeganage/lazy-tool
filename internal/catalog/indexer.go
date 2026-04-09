@@ -25,6 +25,7 @@ type Indexer struct {
 	Factory  connectors.Factory
 	Summary  summarizer.Summarizer
 	Embed    embeddings.Embedder
+	EmbeddingTextStrategy string
 	Store    *storage.SQLiteStore
 	Vec      *vector.Index
 	Log      *slog.Logger
@@ -231,12 +232,17 @@ func (ix *Indexer) enrichAndAppend(ctx context.Context, rec *models.CapabilityRe
 		}
 		rec.GeneratedSummary = sum
 	}
+	enrichRecord(rec)
 	RefreshSearchText(rec)
 
 	// Compute embedding text hash for cache invalidation.
 	// Reuse the old embedding only when the model matches AND the embedding text
 	// hasn't changed (catches user_summary edits that VersionHash misses).
-	embText := BuildEmbeddingText(rec)
+	strategy := strings.TrimSpace(ix.EmbeddingTextStrategy)
+	if strategy == "" {
+		strategy = "original_first"
+	}
+	embText := BuildEmbeddingTextWithStrategy(rec, strategy)
 	embTextHash := ComputeEmbeddingTextHash(embText)
 	rec.EmbeddingTextHash = embTextHash
 

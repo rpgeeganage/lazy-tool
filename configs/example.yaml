@@ -28,6 +28,7 @@ embeddings:
   model: ""
   base_url: http://127.0.0.1:11434
   api_key_env: ""
+  text_strategy: auto
   retry_attempts: 2
   retry_backoff_ms: 1000
 

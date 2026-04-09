@@ -42,6 +42,7 @@ type Config struct {
 		Model     string `yaml:"model"`
 		BaseURL   string `yaml:"base_url"`
 		APIKeyEnv string `yaml:"api_key_env"`
+		TextStrategy string `yaml:"text_strategy"`
 		RetryAttempts int `yaml:"retry_attempts"`
 		RetryBackoffMS int `yaml:"retry_backoff_ms"`
 	} `yaml:"embeddings"`
