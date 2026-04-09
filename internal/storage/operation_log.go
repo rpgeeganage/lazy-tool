@@ -45,6 +45,7 @@ type OperationSummary struct {
 	ProxyCount    int64
 	VectorCount   int64
 	EmbedCount    int64
+	ErrorClasses  map[string]int64
 }
 
 type SearchTimelinePoint struct {
@@ -64,6 +65,7 @@ type SourceOperationStats struct {
 	LastReindexOK *bool
 	LastReindexMessage string
 	LastReindexAt *time.Time
+	ErrorClasses map[string]int64
 }
 
 func (s *SQLiteStore) ensureOperationLog(ctx context.Context) error {
@@ -235,6 +237,11 @@ FROM operation_log
 		ts := time.UnixMilli(latest.Int64).UTC()
 		out.LatestAt = &ts
 	}
+	classes, err := s.errorClassCounts(ctx, "")
+	if err != nil {
+		return OperationSummary{}, err
+	}
+	out.ErrorClasses = classes
 	return out, nil
 }
 
@@ -319,6 +326,11 @@ ORDER BY source_id
 		if latestErrAt != nil {
 			stat.LatestAt = latestErrAt
 		}
+		classes, err := s.errorClassCounts(ctx, stat.SourceID)
+		if err != nil {
+			return nil, err
+		}
+		stat.ErrorClasses = classes
 		h, ok, err := s.GetSourceHealth(ctx, stat.SourceID)
 		if err != nil {
 			return nil, err
@@ -356,6 +368,37 @@ LIMIT 1
 	}
 	tm := time.UnixMilli(ts.Int64).UTC()
 	return errText.String, &tm, nil
+}
+
+func (s *SQLiteStore) errorClassCounts(ctx context.Context, sourceID string) (map[string]int64, error) {
+	query := `
+SELECT COALESCE(json_extract(metadata_json, '$.error_class'), ''), COUNT(*)
+FROM operation_log
+WHERE error <> ''`
+	args := []any{}
+	if sourceID != "" {
+		query += ` AND source_id = ?`
+		args = append(args, sourceID)
+	}
+	query += ` GROUP BY COALESCE(json_extract(metadata_json, '$.error_class'), '')`
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	out := map[string]int64{}
+	for rows.Next() {
+		var class string
+		var count int64
+		if err := rows.Scan(&class, &count); err != nil {
+			return nil, err
+		}
+		if class == "" {
+			class = "unknown"
+		}
+		out[class] = count
+	}
+	return out, rows.Err()
 }
 
 func nullIfEmpty(v string) any {

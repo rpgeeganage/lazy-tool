@@ -147,14 +147,15 @@ func ExecuteProxy(ctx context.Context, stack *runtime.Stack, log *slog.Logger, p
 		durationMS := time.Since(started).Milliseconds()
 		metrics.ProxyInvokeDuration(sourceID, proxyName, durationMS, cached, err)
 		if stack != nil && stack.Store != nil {
+			metadata := mergeMetadata(map[string]any{
+				"proxy_tool_name": proxyName,
+				"cached":          cached,
+			}, errorMetadata(err))
 			_ = stack.Store.RecordOperation(ctx, storage.OperationLogEvent{
 				Operation:  "proxy_invoke",
 				SourceID:   sourceID,
 				DurationMS: durationMS,
-				Metadata: map[string]any{
-					"proxy_tool_name": proxyName,
-					"cached":          cached,
-				},
+				Metadata:   metadata,
 				Error: errorString(err),
 			})
 		}

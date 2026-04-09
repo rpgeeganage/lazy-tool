@@ -42,6 +42,19 @@ func TestOperationLogSummariesAndTimeline(t *testing.T) {
 	if summary.CacheHits != 1 || summary.CacheMisses != 1 {
 		t.Fatalf("unexpected cache summary: %#v", summary)
 	}
+	if summary.ErrorClasses["unknown"] != 1 {
+		t.Fatalf("expected unknown class count from existing error row, got %#v", summary.ErrorClasses)
+	}
+	if err := s.RecordOperation(ctx, OperationLogEvent{Operation: "proxy_invoke", SourceID: "src1", DurationMS: 9, Error: "auth: 401 unauthorized", Metadata: map[string]any{"error_class": "auth"}, CreatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	summary, err = s.SummarizeOperations(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.ErrorClasses["auth"] != 1 || summary.ErrorClasses["unknown"] != 1 {
+		t.Fatalf("expected auth class count, got %#v", summary.ErrorClasses)
+	}
 	points, err := s.SearchTimeline(ctx, 60, 10)
 	if err != nil {
 		t.Fatal(err)
@@ -58,5 +71,8 @@ func TestOperationLogSummariesAndTimeline(t *testing.T) {
 	}
 	if sources[0].LastReindexOK == nil || !*sources[0].LastReindexOK {
 		t.Fatalf("expected reindex health: %#v", sources[0])
+	}
+	if sources[0].ErrorClasses["auth"] != 1 || len(sources[0].ErrorClasses) != 1 {
+		t.Fatalf("expected auth class on source stats: %#v", sources[0].ErrorClasses)
 	}
 }
