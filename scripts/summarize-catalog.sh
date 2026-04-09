@@ -206,7 +206,7 @@ process_capability() {
 
   echo "  Summarizing $proxy_name ..."
   local response
-  response="$(opencode run -m "$MODEL" --pure "$prompt" </dev/null 2>/dev/null)" || {
+  response="$(opencode --pure run -m "$MODEL" "$prompt" </dev/null 2>/dev/null)" || {
     echo "  FAIL: opencode run failed for $proxy_name" >&2
     inc_fail
     return
