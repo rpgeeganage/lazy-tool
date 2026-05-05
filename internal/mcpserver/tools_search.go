@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"lazy-tool/internal/config"
 	"lazy-tool/internal/metrics"
@@ -51,11 +52,11 @@ type searchHit struct {
 	Score               float64            `json:"score"`
 	ScoreBreakdown      map[string]float64 `json:"score_breakdown,omitempty"`
 	WhyMatched          []string           `json:"why_matched"`
-	NextToolName        string          `json:"next_tool_name,omitempty"`
-	NextInputExample    map[string]any  `json:"next_input_example,omitempty"`
-	RequiredInputFields []string        `json:"required_input_fields,omitempty"`
-	NextStep            string          `json:"next_step,omitempty"`
-	Anthropic           *anthropicBlock `json:"anthropic,omitempty"`
+	NextToolName        string             `json:"next_tool_name,omitempty"`
+	NextInputExample    map[string]any     `json:"next_input_example,omitempty"`
+	RequiredInputFields []string           `json:"required_input_fields,omitempty"`
+	NextStep            string             `json:"next_step,omitempty"`
+	Anthropic           *anthropicBlock    `json:"anthropic,omitempty"`
 }
 
 func anthropicHint(kindStr, proxy string) *anthropicBlock {
@@ -256,10 +257,53 @@ type searchToolsOut struct {
 	Grouped       []searchGroupWire `json:"grouped,omitempty"`
 }
 
+func searchToolsInputSchema() *jsonschema.Schema {
+	return &jsonschema.Schema{
+		Type: "object",
+		Properties: map[string]*jsonschema.Schema{
+			"query": {
+				Type:        "string",
+				Description: "natural language query",
+			},
+			"limit": {
+				Type:        "integer",
+				Description: "max results (default 10)",
+			},
+			"source_ids": {
+				Type:        "array",
+				Description: "filter to these upstream source ids",
+				Items:       &jsonschema.Schema{Type: "string"},
+			},
+			"group_by_source": {
+				Type:        "boolean",
+				Description: "group hits by upstream source id",
+			},
+			"lexical_only": {
+				Type:        "boolean",
+				Description: "skip embeddings and vector retrieval for this query",
+			},
+			"explain_scores": {
+				Type:        "boolean",
+				Description: "include pre-ranker score_breakdown per hit",
+			},
+		},
+		Required: []string{"query"},
+		PropertyOrder: []string{
+			"query",
+			"limit",
+			"source_ids",
+			"group_by_source",
+			"lexical_only",
+			"explain_scores",
+		},
+	}
+}
+
 func registerSearchTools(server *mcp.Server, stack *runtime.Stack) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "search_tools",
 		Description: "Search the local MCP catalog: tools, prompts, and resources (lexical FTS5 + optional vector boost). Then use next_tool_name with next_input_example from a result; do not invent proxy_tool_name values.",
+		InputSchema: searchToolsInputSchema(),
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in searchToolsArgs) (*mcp.CallToolResult, searchToolsOut, error) {
 		lim := in.Limit
 		if lim <= 0 {
