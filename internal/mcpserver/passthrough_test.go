@@ -2,6 +2,7 @@ package mcpserver
 
 import (
 	"context"
+	"encoding/json"
 	"path/filepath"
 	"testing"
 	"time"
@@ -118,5 +119,24 @@ func TestPassthroughFallback_NoPassthroughSources(t *testing.T) {
 	ranked := applyPassthroughFallback(ctx, stack, models.RankedResults{}, 10, nil)
 	if len(ranked.Results) != 0 {
 		t.Fatalf("expected 0, got %d", len(ranked.Results))
+	}
+}
+
+func TestSearchToolsInputSchema_SourceIDsIsArray(t *testing.T) {
+	raw, err := json.Marshal(searchToolsInputSchema())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var schema struct {
+		Properties map[string]struct {
+			Type any `json:"type"`
+		} `json:"properties"`
+	}
+	if err := json.Unmarshal(raw, &schema); err != nil {
+		t.Fatal(err)
+	}
+	got := schema.Properties["source_ids"].Type
+	if got != "array" {
+		t.Fatalf("source_ids type: got %#v want %q", got, "array")
 	}
 }
